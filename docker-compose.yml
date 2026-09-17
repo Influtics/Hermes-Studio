@@ -8,7 +8,9 @@
 #   1. cp .env.example .env
 #   2. Add your ANTHROPIC_API_KEY to .env
 #   3. docker compose up
-#   4. Open http://localhost:3000
+#   4. Open http://localhost:3000   (only if you add a `ports: ['3000:3000']`
+#      block to the hermes-studio service; the default Coolify deploy
+#      exposes nothing on the host and is reached via the FQDN only)
 #
 # With Redis session persistence (sessions survive container restarts):
 #   1. Add REDIS_URL=redis://redis:6379 to your .env
@@ -60,8 +62,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-    ports:
-      - '8642:8642'
+    # No host port mapping — Coolify routes hermes-agent internally via
+    # the shared Docker network (hermes-studio talks to hermes-agent:8642).
+    # Binding 8642 on the host conflicts with anything else using it.
 
   # The Hermes Studio Web UI
   # Connects to hermes-agent at http://hermes-agent:8642
@@ -88,8 +91,9 @@ services:
     volumes:
       # Persist file-based sessions across container restarts (fallback store)
       - studio-sessions:/app/.runtime
-    ports:
-      - '3000:3000'
+    # No host port mapping — Coolify/Traefik routes hermes.influtics.com
+    # to this container via FQDN labels. Binding 3000 on the host
+    # conflicts with anything else on the host (e.g. Grafana).
 
   # ─── Optional: Redis session persistence ──────────────────────────────────
   # Activate with: docker compose --profile redis up
