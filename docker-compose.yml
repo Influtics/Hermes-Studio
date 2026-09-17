@@ -45,6 +45,12 @@ services:
       # hermes-agent's MiniMax profile default_aux_model is MiniMax-M2.7 (fork variant);
       # this env var overrides it for the user-selected model.
       LLM_MODEL: ${LLM_MODEL:-MiniMax-M3}
+      # Opt-in HTTP API server (port 8642). Without this, the gateway serves
+      # messaging platforms only and never binds 8642 — the healthcheck
+      # curl fails, depends_on service_healthy cascades, hermes-studio never
+      # starts. Override to 'false' only if you intentionally want a
+      # messaging-only gateway.
+      API_SERVER_ENABLED: 'true'
       # Anthropic not used — kept as empty string so existing docs/scripts that
       # probe for this var (e.g. onboarding wizard) don't error.
       ANTHROPIC_API_KEY: ''
