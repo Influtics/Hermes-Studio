@@ -1,12 +1,12 @@
 FROM node:22-slim
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9.15.4
 
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml* ./
 
-RUN pnpm install --no-frozen-lockfile --config.approve-builds-for=better-sqlite3,esbuild,unrs-resolver
+RUN pnpm install --no-frozen-lockfile
 
 COPY . .
 
