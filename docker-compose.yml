@@ -37,7 +37,17 @@ services:
     env_file:
       - .env
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # MiniMax — Anthropic-compatible endpoint. hermes-agent's MiniMax provider
+      # is pre-wired for api_mode=anthropic_messages + base_url=https://api.minimax.io/anthropic,
+      # so setting MINIMAX_API_KEY is the entire env delta (no ANTHROPIC_BASE_URL hack).
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      # Default model the gateway uses when none is selected in the UI.
+      # hermes-agent's MiniMax profile default_aux_model is MiniMax-M2.7 (fork variant);
+      # this env var overrides it for the user-selected model.
+      LLM_MODEL: ${LLM_MODEL:-MiniMax-M3}
+      # Anthropic not used — kept as empty string so existing docs/scripts that
+      # probe for this var (e.g. onboarding wizard) don't error.
+      ANTHROPIC_API_KEY: ''
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8642/health']
       interval: 10s
