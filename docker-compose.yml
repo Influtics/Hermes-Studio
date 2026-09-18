@@ -65,6 +65,20 @@ services:
     # No host port mapping — Coolify routes hermes-agent internally via
     # the shared Docker network (hermes-studio talks to hermes-agent:8642).
     # Binding 8642 on the host conflicts with anything else using it.
+    networks:
+      # Join Coolify's shared `coolify` network alongside Traefik
+      # (coolify-proxy) AND the hermes-studio service once the studio
+      # is split out to a native Dockerfile Coolify app (the
+      # compose-deployment pattern doesn't get FQDN → container Traefik
+      # labels injected, so hermes-studio will move to its own
+      # Coolify app on the coolify network). Without this attach,
+      # the split studio cannot resolve `hermes-agent` by name and
+      # HERMES_API_URL=http://hermes-agent:8642 fails with DNS
+      # no such host. `default` keeps the inter-service link to
+      # anything still on the compose network (currently nothing —
+      # this becomes the only way the agent is reachable).
+      - default
+      - coolify
 
   # The Hermes Studio Web UI
   # Connects to hermes-agent at http://hermes-agent:8642
