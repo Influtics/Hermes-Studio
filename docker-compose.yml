@@ -91,6 +91,17 @@ services:
     volumes:
       # Persist file-based sessions across container restarts (fallback store)
       - studio-sessions:/app/.runtime
+    networks:
+      # Join Coolify's shared `coolify` network alongside Traefik
+      # (coolify-proxy). The compose project otherwise isolates this
+      # service on its own bridge network, so Traefik can't resolve
+      # `hermes-studio` by service name and the public FQDN
+      # (hermes.influtics.com) returns 502 Bad Gateway. Attaching
+      # here lets Traefik reach the container directly. `default`
+      # keeps the inter-service link to hermes-agent working
+      # (HERMES_API_URL=http://hermes-agent:8642).
+      - default
+      - coolify
     # No host port mapping — Coolify/Traefik routes hermes.influtics.com
     # to this container via FQDN labels. Binding 3000 on the host
     # conflicts with anything else on the host (e.g. Grafana).
@@ -117,3 +128,12 @@ services:
 volumes:
   studio-sessions:
   redis-data:
+
+networks:
+  # Coolify's shared Docker network (created and managed by Coolify
+  # itself, with coolify-proxy/Traefik attached). Declared `external`
+  # so Docker Compose does not try to create or destroy it; it just
+  # joins the existing one when the service lists it under `networks:`.
+  coolify:
+    external: true
+    name: coolify
