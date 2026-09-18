@@ -1,8 +1,20 @@
 FROM python:3.11-slim
 
+# xz-utils: required so hermes-agent can extract its bundled Node.js 22 tarball
+# (node-v22.x-linux-x64.tar.xz). Without it, every startup logs:
+#   tar (child): xz: Cannot exec: No such file or directory
+# and browser tools stay disabled.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl git \
+    && apt-get install -y --no-install-recommends curl git xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+# Default MiniMax endpoint for hermes-agent. The agent's provider router uses
+# URL-based heuristic: a base_url ending in /anthropic → anthropic_messages
+# adapter → MINIMAX_API_KEY (NOT ANTHROPIC_API_KEY). If the user overrides
+# this in Coolify env vars at runtime, the runtime value wins (as expected).
+# Set this even when no key is set so the value stays correct after redeploys
+# that swap keys.
+ENV MINIMAX_BASE_URL=https://api.minimax.io/anthropic
 
 # Clone hermes-agent and checkout latest compatible version
 # Set HERMES_AGENT_VERSION env var to pin to a specific version (e.g., 0.18.0)
@@ -52,6 +64,15 @@ PY
 
 RUN pip install --no-cache-dir -e .
 
+# Wrapper entrypoint: when MINIMAX_API_KEY is set, drop Anthropic credentials
+# so the upstream router can't send MiniMax's key to api.anthropic.com as a
+# fallback (visible symptom: studio's /api/skills returns 500 with
+# {"type":"error","error":{"type":"invalid_request_error","message":"Invalid API Key"}}
+# because auxiliary clients fall back through Anthropic).
+# Idempotent: if MINIMAX_API_KEY is unset, the wrapper is a passthrough.
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 8642
 
-CMD ["hermes", "gateway", "run"]
+CMD ["/entrypoint.sh", "hermes", "gateway", "run"]
