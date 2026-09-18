@@ -70,6 +70,7 @@ import { Route as ApiConnectionStatusRouteImport } from './routes/api/connection
 import { Route as ApiConductorStopRouteImport } from './routes/api/conductor-stop'
 import { Route as ApiConductorSpawnRouteImport } from './routes/api/conductor-spawn'
 import { Route as ApiChatEventsRouteImport } from './routes/api/chat-events'
+import { Route as ApiAuthLogoutRouteImport } from './routes/api/auth-logout'
 import { Route as ApiAuthCheckRouteImport } from './routes/api/auth-check'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiTasksIndexRouteImport } from './routes/api/tasks/index'
@@ -424,6 +425,11 @@ const ApiChatEventsRoute = ApiChatEventsRouteImport.update({
   path: '/api/chat-events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthLogoutRoute = ApiAuthLogoutRouteImport.update({
+  id: '/api/auth-logout',
+  path: '/api/auth-logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthCheckRoute = ApiAuthCheckRouteImport.update({
   id: '/api/auth-check',
   path: '/api/auth-check',
@@ -694,6 +700,7 @@ export interface FileRoutesByFullPath {
   '/terminal': typeof TerminalRoute
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
+  '/api/auth-logout': typeof ApiAuthLogoutRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
   '/api/conductor-stop': typeof ApiConductorStopRoute
@@ -804,6 +811,7 @@ export interface FileRoutesByTo {
   '/terminal': typeof TerminalRoute
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
+  '/api/auth-logout': typeof ApiAuthLogoutRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
   '/api/conductor-stop': typeof ApiConductorStopRoute
@@ -916,6 +924,7 @@ export interface FileRoutesById {
   '/terminal': typeof TerminalRoute
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
+  '/api/auth-logout': typeof ApiAuthLogoutRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
   '/api/conductor-stop': typeof ApiConductorStopRoute
@@ -1029,6 +1038,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/api/auth'
     | '/api/auth-check'
+    | '/api/auth-logout'
     | '/api/chat-events'
     | '/api/conductor-spawn'
     | '/api/conductor-stop'
@@ -1139,6 +1149,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/api/auth'
     | '/api/auth-check'
+    | '/api/auth-logout'
     | '/api/chat-events'
     | '/api/conductor-spawn'
     | '/api/conductor-stop'
@@ -1250,6 +1261,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/api/auth'
     | '/api/auth-check'
+    | '/api/auth-logout'
     | '/api/chat-events'
     | '/api/conductor-spawn'
     | '/api/conductor-stop'
@@ -1362,6 +1374,7 @@ export interface RootRouteChildren {
   TerminalRoute: typeof TerminalRoute
   ApiAuthRoute: typeof ApiAuthRoute
   ApiAuthCheckRoute: typeof ApiAuthCheckRoute
+  ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiChatEventsRoute: typeof ApiChatEventsRoute
   ApiConductorSpawnRoute: typeof ApiConductorSpawnRoute
   ApiConductorStopRoute: typeof ApiConductorStopRoute
@@ -1855,6 +1868,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat-events'
       fullPath: '/api/chat-events'
       preLoaderRoute: typeof ApiChatEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth-logout': {
+      id: '/api/auth-logout'
+      path: '/api/auth-logout'
+      fullPath: '/api/auth-logout'
+      preLoaderRoute: typeof ApiAuthLogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth-check': {
@@ -2354,6 +2374,7 @@ const rootRouteChildren: RootRouteChildren = {
   TerminalRoute: TerminalRoute,
   ApiAuthRoute: ApiAuthRoute,
   ApiAuthCheckRoute: ApiAuthCheckRoute,
+  ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiChatEventsRoute: ApiChatEventsRoute,
   ApiConductorSpawnRoute: ApiConductorSpawnRoute,
   ApiConductorStopRoute: ApiConductorStopRoute,
