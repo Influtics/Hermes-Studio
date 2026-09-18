@@ -70,7 +70,7 @@ RUN pip install --no-cache-dir -e .
 # {"type":"error","error":{"type":"invalid_request_error","message":"Invalid API Key"}}
 # because auxiliary clients fall back through Anthropic).
 # Idempotent: if MINIMAX_API_KEY is unset, the wrapper is a passthrough.
-COPY entrypoint.sh /entrypoint.sh
+COPY docker/agent/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 8642
