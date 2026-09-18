@@ -2,7 +2,7 @@
  * Jobs API proxy — forwards to Hermes FastAPI /api/jobs
  */
 import { createFileRoute } from '@tanstack/react-router'
-import { isAuthenticated } from '../../server/auth-middleware'
+import { requireAuth } from '../../server/auth-middleware'
 import {
   HERMES_API,
   HERMES_UPGRADE_INSTRUCTIONS,
@@ -15,11 +15,8 @@ export const Route = createFileRoute('/api/hermes-jobs')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-            status: 401,
-          })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         await ensureGatewayProbed()
         if (!getCapabilities().jobs) {
           return new Response(
@@ -41,11 +38,8 @@ export const Route = createFileRoute('/api/hermes-jobs')({
         })
       },
       POST: async ({ request }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-            status: 401,
-          })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         await ensureGatewayProbed()
         if (!getCapabilities().jobs) {
           return new Response(

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireAuth } from '../../../server/auth-middleware'
 import {
   SESSIONS_API_UNAVAILABLE_MESSAGE,
   ensureGatewayProbed,
@@ -13,9 +13,8 @@ export const Route = createFileRoute('/api/sessions/$sessionKey/status')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         await ensureGatewayProbed()
         if (!getGatewayCapabilities().sessions) {
           return json(

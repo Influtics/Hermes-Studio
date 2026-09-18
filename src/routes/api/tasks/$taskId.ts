@@ -5,7 +5,7 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireAuth } from '../../../server/auth-middleware'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import { getTask, updateTask, deleteTask } from '../../../server/task-store'
 import type { TaskColumn, TaskPriority } from '../../../types/task'
@@ -17,9 +17,8 @@ export const Route = createFileRoute('/api/tasks/$taskId')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const task = getTask(params.taskId)
         if (!task) {
           return json({ ok: false, error: 'Task not found' }, { status: 404 })
@@ -28,9 +27,8 @@ export const Route = createFileRoute('/api/tasks/$taskId')({
       },
 
       PATCH: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
 
@@ -64,9 +62,8 @@ export const Route = createFileRoute('/api/tasks/$taskId')({
       },
 
       DELETE: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const deleted = deleteTask(params.taskId)
         if (!deleted) {
           return json({ ok: false, error: 'Task not found' }, { status: 404 })

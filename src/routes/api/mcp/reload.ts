@@ -1,8 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireAuth } from '../../../server/auth-middleware'
 import { BEARER_TOKEN, HERMES_API } from '../../../server/gateway-capabilities'
-
-type AuthResult = Response | true
 
 function authHeaders(): Record<string, string> {
   return BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
@@ -14,8 +12,8 @@ export const Route = createFileRoute('/api/mcp/reload')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const authResult = isAuthenticated(request) as AuthResult
-        if (authResult !== true) return authResult
+        const authError = requireAuth(request)
+        if (authError) return authError
 
         for (const path of RELOAD_PATHS) {
           try {

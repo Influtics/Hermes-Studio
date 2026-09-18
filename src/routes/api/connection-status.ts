@@ -12,7 +12,7 @@ import {
   ensureGatewayProbed,
   getChatMode,
 } from '../../server/gateway-capabilities'
-import { isAuthenticated } from '../../server/auth-middleware'
+import { requireAuth } from '../../server/auth-middleware'
 
 const CONFIG_PATH = path.join(os.homedir(), '.hermes', 'config.yaml')
 
@@ -49,8 +49,8 @@ export const Route = createFileRoute('/api/connection-status')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const authResult = isAuthenticated(request)
-        if (authResult !== true) return authResult as unknown as Response
+        const authError = requireAuth(request)
+        if (authError) return authError
 
         const caps = await ensureGatewayProbed()
         const activeModel = readActiveModel()

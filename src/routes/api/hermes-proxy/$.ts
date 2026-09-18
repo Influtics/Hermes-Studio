@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { HERMES_API } from '../../../server/gateway-capabilities'
-import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireAuth } from '../../../server/auth-middleware'
 
 async function proxyRequest(request: Request, splat: string) {
   const incomingUrl = new URL(request.url)
@@ -37,39 +37,23 @@ export const Route = createFileRoute('/api/hermes-proxy/$')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(
-            JSON.stringify({ ok: false, error: 'Unauthorized' }),
-            { status: 401, headers: { 'content-type': 'application/json' } },
-          )
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         return proxyRequest(request, params._splat || '')
       },
       POST: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(
-            JSON.stringify({ ok: false, error: 'Unauthorized' }),
-            { status: 401, headers: { 'content-type': 'application/json' } },
-          )
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         return proxyRequest(request, params._splat || '')
       },
       PATCH: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(
-            JSON.stringify({ ok: false, error: 'Unauthorized' }),
-            { status: 401, headers: { 'content-type': 'application/json' } },
-          )
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         return proxyRequest(request, params._splat || '')
       },
       DELETE: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(
-            JSON.stringify({ ok: false, error: 'Unauthorized' }),
-            { status: 401, headers: { 'content-type': 'application/json' } },
-          )
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         return proxyRequest(request, params._splat || '')
       },
     },

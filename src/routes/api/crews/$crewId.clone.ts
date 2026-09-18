@@ -12,7 +12,7 @@
 import { randomUUID } from 'node:crypto'
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireAuth } from '../../../server/auth-middleware'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import { getCrew, createCrew } from '../../../server/crew-store'
 import {
@@ -49,9 +49,8 @@ export const Route = createFileRoute('/api/crews/$crewId/clone')({
   server: {
     handlers: {
       POST: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
 

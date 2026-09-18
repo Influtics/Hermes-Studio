@@ -10,7 +10,7 @@ import { promisify } from 'node:util'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { isAuthenticated } from '../../server/auth-middleware'
+import { requireAuth } from '../../server/auth-middleware'
 
 const execFileAsync = promisify(execFile)
 
@@ -50,9 +50,8 @@ export const Route = createFileRoute('/api/systemd-status')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!isAuthenticated(request)) {
-          return Response.json({ ok: false }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
 
         // Non-Linux or no systemctl → graceful degradation
         if (process.platform !== 'linux') {
