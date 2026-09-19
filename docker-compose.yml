@@ -8,7 +8,9 @@
 #   1. cp .env.example .env
 #   2. Add your ANTHROPIC_API_KEY to .env
 #   3. docker compose up
-#   4. Open http://localhost:3000
+#   4. Open http://localhost:3000   (only if you add a `ports: ['3000:3000']`
+#      block to the hermes-studio service; the default Coolify deploy
+#      exposes nothing on the host and is reached via the FQDN only)
 #
 # With Redis session persistence (sessions survive container restarts):
 #   1. Add REDIS_URL=redis://redis:6379 to your .env
@@ -37,15 +39,46 @@ services:
     env_file:
       - .env
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # MiniMax — Anthropic-compatible endpoint. hermes-agent's MiniMax provider
+      # is pre-wired for api_mode=anthropic_messages + base_url=https://api.minimax.io/anthropic,
+      # so setting MINIMAX_API_KEY is the entire env delta (no ANTHROPIC_BASE_URL hack).
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      # Default model the gateway uses when none is selected in the UI.
+      # hermes-agent's MiniMax profile default_aux_model is MiniMax-M2.7 (fork variant);
+      # this env var overrides it for the user-selected model.
+      LLM_MODEL: ${LLM_MODEL:-MiniMax-M3}
+      # Opt-in HTTP API server (port 8642). Without this, the gateway serves
+      # messaging platforms only and never binds 8642 — the healthcheck
+      # curl fails, depends_on service_healthy cascades, hermes-studio never
+      # starts. Override to 'false' only if you intentionally want a
+      # messaging-only gateway.
+      API_SERVER_ENABLED: 'true'
+      # Anthropic not used — kept as empty string so existing docs/scripts that
+      # probe for this var (e.g. onboarding wizard) don't error.
+      ANTHROPIC_API_KEY: ''
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8642/health']
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
-    ports:
-      - '8642:8642'
+    # No host port mapping — Coolify routes hermes-agent internally via
+    # the shared Docker network (hermes-studio talks to hermes-agent:8642).
+    # Binding 8642 on the host conflicts with anything else using it.
+    networks:
+      # Join Coolify's shared `coolify` network alongside Traefik
+      # (coolify-proxy) AND the hermes-studio service once the studio
+      # is split out to a native Dockerfile Coolify app (the
+      # compose-deployment pattern doesn't get FQDN → container Traefik
+      # labels injected, so hermes-studio will move to its own
+      # Coolify app on the coolify network). Without this attach,
+      # the split studio cannot resolve `hermes-agent` by name and
+      # HERMES_API_URL=http://hermes-agent:8642 fails with DNS
+      # no such host. `default` keeps the inter-service link to
+      # anything still on the compose network (currently nothing —
+      # this becomes the only way the agent is reachable).
+      - default
+      - coolify
 
   # The Hermes Studio Web UI
   # Connects to hermes-agent at http://hermes-agent:8642
@@ -72,8 +105,20 @@ services:
     volumes:
       # Persist file-based sessions across container restarts (fallback store)
       - studio-sessions:/app/.runtime
-    ports:
-      - '3000:3000'
+    networks:
+      # Join Coolify's shared `coolify` network alongside Traefik
+      # (coolify-proxy). The compose project otherwise isolates this
+      # service on its own bridge network, so Traefik can't resolve
+      # `hermes-studio` by service name and the public FQDN
+      # (hermes.influtics.com) returns 502 Bad Gateway. Attaching
+      # here lets Traefik reach the container directly. `default`
+      # keeps the inter-service link to hermes-agent working
+      # (HERMES_API_URL=http://hermes-agent:8642).
+      - default
+      - coolify
+    # No host port mapping — Coolify/Traefik routes hermes.influtics.com
+    # to this container via FQDN labels. Binding 3000 on the host
+    # conflicts with anything else on the host (e.g. Grafana).
 
   # ─── Optional: Redis session persistence ──────────────────────────────────
   # Activate with: docker compose --profile redis up
@@ -97,3 +142,12 @@ services:
 volumes:
   studio-sessions:
   redis-data:
+
+networks:
+  # Coolify's shared Docker network (created and managed by Coolify
+  # itself, with coolify-proxy/Traefik attached). Declared `external`
+  # so Docker Compose does not try to create or destroy it; it just
+  # joins the existing one when the service lists it under `networks:`.
+  coolify:
+    external: true
+    name: coolify
