@@ -19,6 +19,7 @@ import { Route as PatternsRouteImport } from './routes/patterns'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as LogsRouteImport } from './routes/logs'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as FilesRouteImport } from './routes/files'
@@ -168,6 +169,11 @@ const MemoryRoute = MemoryRouteImport.update({
 const LogsRoute = LogsRouteImport.update({
   id: '/logs',
   path: '/logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JobsRoute = JobsRouteImport.update({
@@ -688,6 +694,7 @@ export interface FileRoutesByFullPath {
   '/files': typeof FilesRoute
   '/help': typeof HelpRoute
   '/jobs': typeof JobsRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
@@ -800,6 +807,7 @@ export interface FileRoutesByTo {
   '/files': typeof FilesRoute
   '/help': typeof HelpRoute
   '/jobs': typeof JobsRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
@@ -912,6 +920,7 @@ export interface FileRoutesById {
   '/files': typeof FilesRoute
   '/help': typeof HelpRoute
   '/jobs': typeof JobsRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
@@ -1026,6 +1035,7 @@ export interface FileRouteTypes {
     | '/files'
     | '/help'
     | '/jobs'
+    | '/login'
     | '/logs'
     | '/memory'
     | '/operations'
@@ -1138,6 +1148,7 @@ export interface FileRouteTypes {
     | '/files'
     | '/help'
     | '/jobs'
+    | '/login'
     | '/logs'
     | '/memory'
     | '/operations'
@@ -1249,6 +1260,7 @@ export interface FileRouteTypes {
     | '/files'
     | '/help'
     | '/jobs'
+    | '/login'
     | '/logs'
     | '/memory'
     | '/operations'
@@ -1362,6 +1374,7 @@ export interface RootRouteChildren {
   FilesRoute: typeof FilesRoute
   HelpRoute: typeof HelpRoute
   JobsRoute: typeof JobsRoute
+  LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
   MemoryRoute: typeof MemoryRoute
   OperationsRoute: typeof OperationsRoute
@@ -1511,6 +1524,13 @@ declare module '@tanstack/react-router' {
       path: '/logs'
       fullPath: '/logs'
       preLoaderRoute: typeof LogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/jobs': {
@@ -2362,6 +2382,7 @@ const rootRouteChildren: RootRouteChildren = {
   FilesRoute: FilesRoute,
   HelpRoute: HelpRoute,
   JobsRoute: JobsRoute,
+  LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
   MemoryRoute: MemoryRoute,
   OperationsRoute: OperationsRoute,
