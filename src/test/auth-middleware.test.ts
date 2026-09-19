@@ -19,6 +19,7 @@ import {
   getSessionTokenFromCookie,
   isAuthenticated,
   createSessionCookie,
+  requireAuth,
 } from '@/server/auth-middleware'
 
 beforeEach(() => {
@@ -170,5 +171,48 @@ describe('createSessionCookie()', () => {
 
   it('has a Max-Age value', () => {
     expect(createSessionCookie('t')).toContain('Max-Age=')
+  })
+})
+
+describe('requireAuth()', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    process.env.HERMES_PASSWORD = 'test-password'
+  })
+
+  afterEach(() => {
+    delete process.env.HERMES_PASSWORD
+  })
+
+  it('returns null when password protection is disabled', () => {
+    delete process.env.HERMES_PASSWORD
+    const req = new Request('http://localhost/test')
+    expect(requireAuth(req)).toBeNull()
+  })
+
+  it('returns null when password is set and the request carries a valid cookie', () => {
+    const token = generateSessionToken()
+    storeSessionToken(token)
+    const req = new Request('http://localhost/test', {
+      headers: { cookie: `hermes-auth=${token}` },
+    })
+    expect(requireAuth(req)).toBeNull()
+    revokeSessionToken(token)
+  })
+
+  it('returns a 401 Response when password is set and the cookie is missing', () => {
+    const req = new Request('http://localhost/test')
+    const res = requireAuth(req)
+    expect(res).not.toBeNull()
+    expect(res!.status).toBe(401)
+  })
+
+  it('401 body has shape { ok: false, code: "UNAUTHENTICATED", error: string }', async () => {
+    const req = new Request('http://localhost/test')
+    const res = requireAuth(req)
+    expect(res).not.toBeNull()
+    const body = await res!.json()
+    expect(body).toMatchObject({ ok: false, code: 'UNAUTHENTICATED' })
+    expect(typeof body.error).toBe('string')
   })
 })

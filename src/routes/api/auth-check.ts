@@ -10,6 +10,12 @@ export const Route = createFileRoute('/api/auth-check')({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        // authRequired always reflects the env state (HERMES_PASSWORD set vs
+        // unset), independent of agent reachability. The 503 status below
+        // tells the UI the agent is unreachable; the authRequired field
+        // tells the UI whether a login form is needed at all.
+        const authRequired = isPasswordProtectionEnabled()
+
         try {
           // Use ensureGatewayProbed() which handles auto-detection across
           // multiple ports (8642, 8643) instead of checking a single
@@ -23,7 +29,7 @@ export const Route = createFileRoute('/api/auth-check')({
             return json(
               {
                 authenticated: false,
-                authRequired: false,
+                authRequired,
                 error: 'hermes_agent_unreachable',
               },
               { status: 503 },
@@ -33,7 +39,7 @@ export const Route = createFileRoute('/api/auth-check')({
           return json(
             {
               authenticated: false,
-              authRequired: false,
+              authRequired,
               error:
                 error instanceof DOMException && error.name === 'AbortError'
                   ? 'hermes_agent_timeout'
@@ -43,7 +49,6 @@ export const Route = createFileRoute('/api/auth-check')({
           )
         }
 
-        const authRequired = isPasswordProtectionEnabled()
         const authenticated = isAuthenticated(request)
 
         return json({

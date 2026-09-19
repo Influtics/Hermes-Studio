@@ -1,15 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireAuth } from '../../../server/auth-middleware'
 import { buildKnowledgeGraph } from '../../../server/knowledge-browser'
 
 export const Route = createFileRoute('/api/knowledge/graph')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!isAuthenticated(request)) {
-          return json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
 
         try {
           return json(buildKnowledgeGraph())

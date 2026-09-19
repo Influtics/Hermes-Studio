@@ -64,6 +64,7 @@ import {
   MenuRoot,
   MenuTrigger,
 } from '@/components/ui/menu'
+import { LogoutButton } from '@/components/logout-button'
 
 type WorkspaceStats = Record<string, unknown>
 
@@ -1180,7 +1181,7 @@ function ChatSidebarComponent({
             </MenuContent>
           </MenuRoot>
 
-          {/* Settings + Theme toggle */}
+          {/* Settings, theme toggle, sign out */}
           {!isVisuallyCollapsed && (
             <div className="flex items-center gap-0.5">
               <button
@@ -1196,6 +1197,7 @@ function ChatSidebarComponent({
                 />
               </button>
               <ThemeToggleMini />
+              <LogoutButton />
             </div>
           )}
         </div>

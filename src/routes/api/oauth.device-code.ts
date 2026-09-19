@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
+import { requireAuth } from '../../server/auth-middleware'
 import { z } from 'zod'
 
 const BodySchema = z.object({
@@ -10,6 +11,9 @@ export const Route = createFileRoute('/api/oauth/device-code')({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const authError = requireAuth(request)
+        if (authError) return authError
+
         let body: unknown
         try {
           body = await request.json()

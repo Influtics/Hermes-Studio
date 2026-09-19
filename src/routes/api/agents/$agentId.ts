@@ -5,7 +5,7 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireAuth } from '../../../server/auth-middleware'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import {
   getAgent,
@@ -17,18 +17,16 @@ export const Route = createFileRoute('/api/agents/$agentId')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const agent = getAgent(params.agentId)
         if (!agent) return json({ ok: false, error: 'Not found' }, { status: 404 })
         return json({ ok: true, agent })
       },
 
       PATCH: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
 
@@ -71,9 +69,8 @@ export const Route = createFileRoute('/api/agents/$agentId')({
       },
 
       DELETE: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
 
         const existing = getAgent(params.agentId)
         if (!existing) return json({ ok: false, error: 'Not found' }, { status: 404 })

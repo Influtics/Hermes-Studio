@@ -6,7 +6,7 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireAuth } from '../../../server/auth-middleware'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import {
   getCrew,
@@ -21,9 +21,8 @@ export const Route = createFileRoute('/api/crews/$crewId')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const crew = getCrew(params.crewId)
         if (!crew) {
           return json({ ok: false, error: 'Crew not found' }, { status: 404 })
@@ -32,9 +31,8 @@ export const Route = createFileRoute('/api/crews/$crewId')({
       },
 
       PATCH: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
 
@@ -81,9 +79,8 @@ export const Route = createFileRoute('/api/crews/$crewId')({
       },
 
       DELETE: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const deleted = deleteCrew(params.crewId)
         if (!deleted) {
           return json({ ok: false, error: 'Crew not found' }, { status: 404 })

@@ -19,6 +19,7 @@ import { Route as PatternsRouteImport } from './routes/patterns'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as LogsRouteImport } from './routes/logs'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as FilesRouteImport } from './routes/files'
@@ -70,6 +71,7 @@ import { Route as ApiConnectionStatusRouteImport } from './routes/api/connection
 import { Route as ApiConductorStopRouteImport } from './routes/api/conductor-stop'
 import { Route as ApiConductorSpawnRouteImport } from './routes/api/conductor-spawn'
 import { Route as ApiChatEventsRouteImport } from './routes/api/chat-events'
+import { Route as ApiAuthLogoutRouteImport } from './routes/api/auth-logout'
 import { Route as ApiAuthCheckRouteImport } from './routes/api/auth-check'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiTasksIndexRouteImport } from './routes/api/tasks/index'
@@ -167,6 +169,11 @@ const MemoryRoute = MemoryRouteImport.update({
 const LogsRoute = LogsRouteImport.update({
   id: '/logs',
   path: '/logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JobsRoute = JobsRouteImport.update({
@@ -422,6 +429,11 @@ const ApiConductorSpawnRoute = ApiConductorSpawnRouteImport.update({
 const ApiChatEventsRoute = ApiChatEventsRouteImport.update({
   id: '/api/chat-events',
   path: '/api/chat-events',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthLogoutRoute = ApiAuthLogoutRouteImport.update({
+  id: '/api/auth-logout',
+  path: '/api/auth-logout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthCheckRoute = ApiAuthCheckRouteImport.update({
@@ -682,6 +694,7 @@ export interface FileRoutesByFullPath {
   '/files': typeof FilesRoute
   '/help': typeof HelpRoute
   '/jobs': typeof JobsRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
@@ -694,6 +707,7 @@ export interface FileRoutesByFullPath {
   '/terminal': typeof TerminalRoute
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
+  '/api/auth-logout': typeof ApiAuthLogoutRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
   '/api/conductor-stop': typeof ApiConductorStopRoute
@@ -793,6 +807,7 @@ export interface FileRoutesByTo {
   '/files': typeof FilesRoute
   '/help': typeof HelpRoute
   '/jobs': typeof JobsRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
@@ -804,6 +819,7 @@ export interface FileRoutesByTo {
   '/terminal': typeof TerminalRoute
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
+  '/api/auth-logout': typeof ApiAuthLogoutRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
   '/api/conductor-stop': typeof ApiConductorStopRoute
@@ -904,6 +920,7 @@ export interface FileRoutesById {
   '/files': typeof FilesRoute
   '/help': typeof HelpRoute
   '/jobs': typeof JobsRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
@@ -916,6 +933,7 @@ export interface FileRoutesById {
   '/terminal': typeof TerminalRoute
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
+  '/api/auth-logout': typeof ApiAuthLogoutRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
   '/api/conductor-stop': typeof ApiConductorStopRoute
@@ -1017,6 +1035,7 @@ export interface FileRouteTypes {
     | '/files'
     | '/help'
     | '/jobs'
+    | '/login'
     | '/logs'
     | '/memory'
     | '/operations'
@@ -1029,6 +1048,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/api/auth'
     | '/api/auth-check'
+    | '/api/auth-logout'
     | '/api/chat-events'
     | '/api/conductor-spawn'
     | '/api/conductor-stop'
@@ -1128,6 +1148,7 @@ export interface FileRouteTypes {
     | '/files'
     | '/help'
     | '/jobs'
+    | '/login'
     | '/logs'
     | '/memory'
     | '/operations'
@@ -1139,6 +1160,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/api/auth'
     | '/api/auth-check'
+    | '/api/auth-logout'
     | '/api/chat-events'
     | '/api/conductor-spawn'
     | '/api/conductor-stop'
@@ -1238,6 +1260,7 @@ export interface FileRouteTypes {
     | '/files'
     | '/help'
     | '/jobs'
+    | '/login'
     | '/logs'
     | '/memory'
     | '/operations'
@@ -1250,6 +1273,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/api/auth'
     | '/api/auth-check'
+    | '/api/auth-logout'
     | '/api/chat-events'
     | '/api/conductor-spawn'
     | '/api/conductor-stop'
@@ -1350,6 +1374,7 @@ export interface RootRouteChildren {
   FilesRoute: typeof FilesRoute
   HelpRoute: typeof HelpRoute
   JobsRoute: typeof JobsRoute
+  LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
   MemoryRoute: typeof MemoryRoute
   OperationsRoute: typeof OperationsRoute
@@ -1362,6 +1387,7 @@ export interface RootRouteChildren {
   TerminalRoute: typeof TerminalRoute
   ApiAuthRoute: typeof ApiAuthRoute
   ApiAuthCheckRoute: typeof ApiAuthCheckRoute
+  ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiChatEventsRoute: typeof ApiChatEventsRoute
   ApiConductorSpawnRoute: typeof ApiConductorSpawnRoute
   ApiConductorStopRoute: typeof ApiConductorStopRoute
@@ -1498,6 +1524,13 @@ declare module '@tanstack/react-router' {
       path: '/logs'
       fullPath: '/logs'
       preLoaderRoute: typeof LogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/jobs': {
@@ -1855,6 +1888,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat-events'
       fullPath: '/api/chat-events'
       preLoaderRoute: typeof ApiChatEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth-logout': {
+      id: '/api/auth-logout'
+      path: '/api/auth-logout'
+      fullPath: '/api/auth-logout'
+      preLoaderRoute: typeof ApiAuthLogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth-check': {
@@ -2342,6 +2382,7 @@ const rootRouteChildren: RootRouteChildren = {
   FilesRoute: FilesRoute,
   HelpRoute: HelpRoute,
   JobsRoute: JobsRoute,
+  LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
   MemoryRoute: MemoryRoute,
   OperationsRoute: OperationsRoute,
@@ -2354,6 +2395,7 @@ const rootRouteChildren: RootRouteChildren = {
   TerminalRoute: TerminalRoute,
   ApiAuthRoute: ApiAuthRoute,
   ApiAuthCheckRoute: ApiAuthCheckRoute,
+  ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiChatEventsRoute: ApiChatEventsRoute,
   ApiConductorSpawnRoute: ApiConductorSpawnRoute,
   ApiConductorStopRoute: ApiConductorStopRoute,

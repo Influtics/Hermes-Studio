@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createFileRoute } from '@tanstack/react-router'
 import { resolveSessionKey } from '../../server/session-utils'
-import { isAuthenticated } from '../../server/auth-middleware'
+import { requireAuth } from '../../server/auth-middleware'
 import { requireJsonContentType } from '../../server/rate-limit'
 import { publishChatEvent } from '../../server/chat-event-bus'
 import {
@@ -269,12 +269,8 @@ export const Route = createFileRoute('/api/send-stream')({
     handlers: {
       POST: async ({ request }) => {
         // Auth check
-        if (!isAuthenticated(request)) {
-          return new Response(
-            JSON.stringify({ ok: false, error: 'Unauthorized' }),
-            { status: 401, headers: { 'Content-Type': 'application/json' } },
-          )
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
         await ensureGatewayProbed()

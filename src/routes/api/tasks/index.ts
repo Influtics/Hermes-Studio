@@ -4,7 +4,7 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated, getUserIdFromRequest } from '../../../server/auth-middleware'
+import { requireAuth, getUserIdFromRequest } from '../../../server/auth-middleware'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import { listTasks, createTask } from '../../../server/task-store'
 import { getUserProfile } from '../../../server/user-profiles'
@@ -18,9 +18,8 @@ export const Route = createFileRoute('/api/tasks/')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
 
         const url = new URL(request.url)
         const filter: Parameters<typeof listTasks>[0] = {}
@@ -65,9 +64,8 @@ export const Route = createFileRoute('/api/tasks/')({
       },
 
       POST: async ({ request }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
 

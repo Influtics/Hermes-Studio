@@ -11,7 +11,7 @@
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireAuth } from '../../../server/auth-middleware'
 import { queryAuditEvents } from '../../../server/event-store'
 
 const DEFAULT_TYPES = ['tool', 'user_message', 'approval']
@@ -21,9 +21,8 @@ export const Route = createFileRoute('/api/audit/')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
 
         const url = new URL(request.url)
         const sessionKey = url.searchParams.get('sessionKey')?.trim() || undefined

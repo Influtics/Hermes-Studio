@@ -14,6 +14,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, loadEnv } from 'vite'
 import viteTsConfigPaths from 'vite-tsconfig-paths'
 
+import { authGateMiddleware } from './src/server/auth-gate-middleware'
+
 // ---------------------------------------------------------------------------
 // Hermes Agent auto-start helpers
 // ---------------------------------------------------------------------------
@@ -459,7 +461,82 @@ const config = defineConfig(({ mode, command }) => {
         projects: ['./tsconfig.json'],
       }),
       tailwindcss(),
-      tanstackStart(),
+      // SSR auth gate — must register BEFORE tanstackStart so vite's
+      // middleware chain runs the gate FIRST and short-circuits with a
+      // 302 to /login before TanStack Start's request handler runs the
+      // SSR renderer. Throws a ready-to-serve Response.
+      // Production mirror lives in src/server-entry.ts (wraps the SSR
+      // fetch directly so the gate runs inside the SSR process and
+      // shares the in-memory token store).
+      {
+        name: 'auth-gate-dev',
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            try {
+              const url = new URL(
+                req.url || '/',
+                `http://${req.headers.host || 'localhost'}`,
+              )
+              const headers = new Headers()
+              for (const [key, value] of Object.entries(req.headers)) {
+                if (value != null) {
+                  headers.set(
+                    key,
+                    Array.isArray(value) ? value.join(', ') : String(value),
+                  )
+                }
+              }
+              let body: Buffer | null = null
+              if (
+                req.method &&
+                req.method !== 'GET' &&
+                req.method !== 'HEAD'
+              ) {
+                body = await new Promise<Buffer>((resolve) => {
+                  const chunks: Buffer[] = []
+                  req.on('data', (chunk: Buffer) => chunks.push(chunk))
+                  req.on('end', () => resolve(Buffer.concat(chunks)))
+                })
+              }
+              const request = new Request(url.toString(), {
+                method: req.method || 'GET',
+                headers,
+                body: body && body.length > 0 ? body : null,
+                // @ts-expect-error duplex is required for streaming bodies in Node fetch
+                duplex: 'half',
+              })
+              await authGateMiddleware({
+                request,
+                next: async () => {
+                  next()
+                  return undefined
+                },
+              })
+              // gate passed through — fall through to next middleware
+            } catch (thrown) {
+              if (thrown instanceof Response) {
+                res.statusCode = thrown.status
+                thrown.headers.forEach((value, key) => {
+                  res.setHeader(key, value)
+                })
+                if (thrown.body) {
+                  const reader = thrown.body.getReader()
+                  while (true) {
+                    const { done, value } = await reader.read()
+                    if (done) break
+                    res.write(value)
+                  }
+                }
+                res.end()
+                return
+              }
+              // Real error — let vite handle it
+              next(thrown as Error)
+            }
+          })
+        },
+      },
+      tanstackStart({ server: { entry: './src/server-entry.ts' } }),
       viteReact(),
       {
         name: 'workspace-daemon',

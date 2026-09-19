@@ -2,7 +2,7 @@
  * Jobs API proxy — forwards individual job operations to Hermes FastAPI
  */
 import { createFileRoute } from '@tanstack/react-router'
-import { isAuthenticated } from '../../server/auth-middleware'
+import { requireAuth } from '../../server/auth-middleware'
 import {
   HERMES_API,
   HERMES_UPGRADE_INSTRUCTIONS,
@@ -14,11 +14,8 @@ export const Route = createFileRoute('/api/hermes-jobs/$jobId')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-            status: 401,
-          })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         await ensureGatewayProbed()
         if (!getCapabilities().jobs) {
           return new Response(
@@ -41,11 +38,8 @@ export const Route = createFileRoute('/api/hermes-jobs/$jobId')({
         })
       },
       POST: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-            status: 401,
-          })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         await ensureGatewayProbed()
         if (!getCapabilities().jobs) {
           return new Response(
@@ -72,11 +66,8 @@ export const Route = createFileRoute('/api/hermes-jobs/$jobId')({
         })
       },
       PATCH: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-            status: 401,
-          })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         await ensureGatewayProbed()
         if (!getCapabilities().jobs) {
           return new Response(
@@ -98,11 +89,8 @@ export const Route = createFileRoute('/api/hermes-jobs/$jobId')({
         })
       },
       DELETE: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-            status: 401,
-          })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         await ensureGatewayProbed()
         if (!getCapabilities().jobs) {
           return new Response(

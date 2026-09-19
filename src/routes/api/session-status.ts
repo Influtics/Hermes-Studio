@@ -8,15 +8,14 @@ import {
   listSessions,
 } from '../../server/hermes-api'
 import { isSyntheticSessionKey } from '../../server/session-utils'
-import { isAuthenticated } from '@/server/auth-middleware'
+import { requireAuth } from '@/server/auth-middleware'
 
 export const Route = createFileRoute('/api/session-status')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!isAuthenticated(request)) {
-          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         await ensureGatewayProbed()
         try {
           const capabilities = getGatewayCapabilities()

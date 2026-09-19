@@ -4,19 +4,15 @@
  * tool.completed, message.delta, run.completed, run.failed.
  */
 import { createFileRoute } from '@tanstack/react-router'
-import { isAuthenticated } from '../../server/auth-middleware'
+import { requireAuth } from '../../server/auth-middleware'
 import { HERMES_API } from '../../server/gateway-capabilities'
 
 export const Route = createFileRoute('/api/hermes-runs/$runId/events')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        if (!isAuthenticated(request)) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' },
-          })
-        }
+        const authError = requireAuth(request)
+        if (authError) return authError
         let upstream: Response
         try {
           upstream = await fetch(

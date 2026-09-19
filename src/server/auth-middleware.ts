@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { json } from '@tanstack/react-start'
 import { getRedisClient, getRedisClientSync } from './redis-client'
 
 const TOKENS_KEY = 'hermes:studio:tokens'
@@ -208,4 +209,19 @@ export function createSessionCookie(token: string): string {
   // path=/: available everywhere
   // maxAge: 30 days
   return `hermes-auth=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${30 * 24 * 60 * 60}`
+}
+
+/**
+ * Returns a 401 Response if the request is unauthenticated, or null if OK.
+ * Use at the top of any handler that should be gated:
+ *
+ *   const authError = requireAuth(request)
+ *   if (authError) return authError
+ */
+export function requireAuth(request: Request): Response | null {
+  if (isAuthenticated(request)) return null
+  return json(
+    { ok: false, error: 'Authentication required', code: 'UNAUTHENTICATED' },
+    { status: 401 },
+  )
 }
