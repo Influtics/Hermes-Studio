@@ -64,6 +64,7 @@ import {
   MenuRoot,
   MenuTrigger,
 } from '@/components/ui/menu'
+import { LogoutButton } from '@/components/logout-button'
 
 type WorkspaceStats = Record<string, unknown>
 
@@ -1196,6 +1197,7 @@ function ChatSidebarComponent({
                 />
               </button>
               <ThemeToggleMini />
+              <LogoutButton />
             </div>
           )}
         </div>
