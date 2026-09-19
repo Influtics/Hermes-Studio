@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { HERMES_API } from '../../../server/gateway-capabilities'
+import { BEARER_TOKEN, HERMES_API } from '../../../server/gateway-capabilities'
 import { requireAuth } from '../../../server/auth-middleware'
 
 async function proxyRequest(request: Request, splat: string) {
@@ -11,6 +11,10 @@ async function proxyRequest(request: Request, splat: string) {
   const headers = new Headers(request.headers)
   headers.delete('host')
   headers.delete('content-length')
+  // Do not forward Studio's auth cookie to hermes-agent — it expects a Bearer token,
+  // not a session cookie, and leaking it would conflate auth domains.
+  headers.delete('cookie')
+  if (BEARER_TOKEN) headers.set('Authorization', `Bearer ${BEARER_TOKEN}`)
 
   const init: RequestInit = {
     method: request.method,

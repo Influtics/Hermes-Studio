@@ -4,11 +4,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { requireAuth } from '../../server/auth-middleware'
 import {
+  BEARER_TOKEN,
   HERMES_API,
   HERMES_UPGRADE_INSTRUCTIONS,
   ensureGatewayProbed,
   getCapabilities,
 } from '../../server/gateway-capabilities'
+
+const authHeaders = (): Record<string, string> =>
+  BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
 
 export const Route = createFileRoute('/api/hermes-jobs/$jobId')({
   server: {
@@ -31,7 +35,7 @@ export const Route = createFileRoute('/api/hermes-jobs/$jobId')({
         const target = subPath
           ? `${HERMES_API}/api/jobs/${params.jobId}/${subPath}${url.search}`
           : `${HERMES_API}/api/jobs/${params.jobId}`
-        const res = await fetch(target)
+        const res = await fetch(target, { headers: authHeaders() })
         return new Response(await res.text(), {
           status: res.status,
           headers: { 'Content-Type': 'application/json' },
@@ -57,7 +61,7 @@ export const Route = createFileRoute('/api/hermes-jobs/$jobId')({
           : `${HERMES_API}/api/jobs/${params.jobId}`
         const res = await fetch(target, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body: body || undefined,
         })
         return new Response(await res.text(), {
@@ -80,7 +84,7 @@ export const Route = createFileRoute('/api/hermes-jobs/$jobId')({
         const body = await request.text()
         const res = await fetch(`${HERMES_API}/api/jobs/${params.jobId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body,
         })
         return new Response(await res.text(), {
@@ -102,6 +106,7 @@ export const Route = createFileRoute('/api/hermes-jobs/$jobId')({
         }
         const res = await fetch(`${HERMES_API}/api/jobs/${params.jobId}`, {
           method: 'DELETE',
+          headers: authHeaders(),
         })
         return new Response(await res.text(), {
           status: res.status,
