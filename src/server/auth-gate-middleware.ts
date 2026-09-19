@@ -26,12 +26,7 @@ const EXEMPT_PATHS: ReadonlySet<string> = new Set([
 ])
 
 /** Path prefixes that bypass the gate. */
-const EXEMPT_PREFIXES: readonly string[] = ['/assets/', '/favicon']
-
-export type AuthGateContext = {
-  /** Set to true for unauthenticated visitors who were redirected to /login */
-  authRedirected?: boolean
-}
+const EXEMPT_PREFIXES: readonly string[] = ['/assets/', '/favicon.ico']
 
 export type AuthGateNext = (ctx?: unknown) => Promise<unknown>
 export type AuthGateInvocation = {
@@ -89,12 +84,12 @@ export async function authGateMiddleware({
   //
   // Why not TanStack Router's redirect() helper: that helper returns a
   // Response carrying a synthetic `options` field (to/replace/statusCode)
-  // and leaves `headers.Location` empty — the router framework reads
-  // `options` later and synthesizes the actual redirect Response. Here
-  // we don't have the router framework in the loop: vite's middleware
-  // chain (dev) and server-entry.js (prod) catch the thrown value
-  // directly and return it as the HTTP response. So we return a
-  // ready-to-serve 302 with Location set in place.
+  // — the router framework reads `options` later via isRedirect() and
+  // synthesizes the actual redirect Response. Here we don't have the
+  // router framework in the loop: vite's middleware chain (dev) and
+  // server-entry.js (prod) catch the thrown value directly and return
+  // it as the HTTP response. So we return a ready-to-serve 302 with
+  // Location set in place.
   //
   // Status 302 (Temporary Redirect) — auth state can change, so the
   // redirect is conditional, not permanent. Curl/browsers handle it as

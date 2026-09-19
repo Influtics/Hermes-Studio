@@ -37,6 +37,13 @@ describe('authGateMiddleware', () => {
     }
   })
 
+  it('passes through exempt path prefixes', async () => {
+    for (const path of ['/assets/index-abc123.js', '/assets/styles.css', '/favicon.ico']) {
+      const res = await invoke(new Request(`http://localhost${path}`))
+      expect(res.status).toBe(200)
+    }
+  })
+
   it('passes through when HERMES_PASSWORD is unset', async () => {
     delete process.env.HERMES_PASSWORD
     const res = await invoke(new Request('http://localhost/dashboard'))
