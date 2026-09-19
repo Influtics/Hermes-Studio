@@ -36,7 +36,7 @@ export function LoginScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100 px-4">
       <div className="w-full max-w-md">
-        <div className="rounded-2xl bg-white px-8 py-10 shadow-xl shadow-primary-900/5 ring-1 ring-primary-900/5">
+        <div className="theme-card rounded-2xl px-8 py-10 shadow-xl shadow-primary-900/5 ring-1 ring-primary-900/5">
           {/* Logo */}
           <div className="mb-8 flex justify-center">
             <div className="flex items-center gap-2.5">
@@ -82,14 +82,21 @@ export function LoginScreen() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
-                className="w-full rounded-lg border border-primary-200 bg-white px-4 py-2.5 text-primary-900 placeholder-primary-400 outline-none transition-all focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20"
+                className="theme-card w-full rounded-lg border border-primary-200 px-4 py-2.5 text-primary-900 placeholder-primary-400 outline-none transition-all focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20"
                 disabled={loading}
                 autoFocus
               />
             </div>
 
             {error && (
-              <div className="rounded-lg bg-red-50 px-4 py-2.5 text-sm text-red-700 ring-1 ring-red-200">
+              <div
+                className="rounded-lg px-4 py-2.5 text-sm ring-1"
+                style={{
+                  backgroundColor: 'color-mix(in srgb, var(--theme-danger) 14%, transparent)',
+                  color: 'var(--theme-danger)',
+                  borderColor: 'color-mix(in srgb, var(--theme-danger) 32%, transparent)',
+                }}
+              >
                 {error}
               </div>
             )}
@@ -97,7 +104,7 @@ export function LoginScreen() {
             <button
               type="submit"
               disabled={loading || !password}
-              className="w-full rounded-lg bg-accent-500 px-4 py-2.5 font-medium text-white transition-all hover:bg-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-lg bg-accent-500 px-4 py-2.5 font-medium text-primary-950 transition-all hover:bg-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500/50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? 'Authenticating...' : 'Continue'}
             </button>
