@@ -5,10 +5,14 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { requireAuth } from '../../server/auth-middleware'
 import {
+  BEARER_TOKEN,
   HERMES_API,
   ensureGatewayProbed,
   getCapabilities,
 } from '../../server/gateway-capabilities'
+
+const authHeaders = (): Record<string, string> =>
+  BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
 
 export const Route = createFileRoute('/api/hermes-runs')({
   server: {
@@ -26,7 +30,7 @@ export const Route = createFileRoute('/api/hermes-runs')({
         const body = await request.text()
         const res = await fetch(`${HERMES_API}/v1/runs`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body,
         })
         return new Response(await res.text(), {
