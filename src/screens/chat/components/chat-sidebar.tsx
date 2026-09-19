@@ -1181,7 +1181,7 @@ function ChatSidebarComponent({
             </MenuContent>
           </MenuRoot>
 
-          {/* Settings + Theme toggle */}
+          {/* Settings, theme toggle, sign out */}
           {!isVisuallyCollapsed && (
             <div className="flex items-center gap-0.5">
               <button
