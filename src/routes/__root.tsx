@@ -1,4 +1,10 @@
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRoute,
+  useRouterState,
+} from '@tanstack/react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import appCss from '../styles.css?url'
@@ -206,6 +212,30 @@ function RootLayout() {
       }
     }
   }, [])
+
+  // Routes that must bypass the full WorkspaceShell (sidebar, agent status
+  // strip, system-metrics footer, the /login route itself, and the auth-gate
+  // middleware's redirect target). Without this branch, the unauthenticated
+  // user lands on /login but the shell still mounts the sidebar and the
+  // ConnectionStartupScreen full-screen overlay (z-[100]) — the overlay
+  // sits on top of the Sign-in form and intercepts clicks, making the
+  // "Sign in" button unclickable. The middleware already exempted /login,
+  // so this branch matches that exemption symmetrically on the client.
+  //
+  // The /login path is the only exempt route today; new exempt routes
+  // should be added to this set AND to auth-gate-middleware.ts EXEMPT_PATHS.
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const isLoginRoute = pathname === '/login'
+
+  if (isLoginRoute) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Outlet />
+      </QueryClientProvider>
+    )
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
