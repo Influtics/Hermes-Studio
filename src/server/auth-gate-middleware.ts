@@ -16,6 +16,16 @@ import {
  *
  * Static assets under /assets/* and /favicon.ico are exempted by prefix match
  * (below) — they are hashed/immutable and must load so the login page can render.
+ *
+ * Vite dev-server paths (/src/, /@id/, /@vite/, /@fs/, /@react-refresh,
+ * /.vite/, /node_modules/.vite/) are also exempted: in dev mode (Coolify
+ * currently serves `vite dev`, not a production build) the browser pulls
+ * every source file and HMR module through the dev server. Gating any of
+ * them would 302 them to /login, and the login page's own <script type=module>
+ * imports would return HTML — breaking the page with a "Failed to load module
+ * script (MIME type text/html)" error. The production bundler rewrites these
+ * to hashed /assets/* paths at build time, so the exemption is dev-only by
+ * design.
  */
 const EXEMPT_PATHS: ReadonlySet<string> = new Set([
   '/login',
@@ -26,7 +36,18 @@ const EXEMPT_PATHS: ReadonlySet<string> = new Set([
 ])
 
 /** Path prefixes that bypass the gate. */
-const EXEMPT_PREFIXES: readonly string[] = ['/assets/', '/favicon.ico']
+const EXEMPT_PREFIXES: readonly string[] = [
+  '/assets/',
+  '/favicon.ico',
+  // Vite dev-server paths — see comment above for why these are required.
+  '/src/',
+  '/@id/',
+  '/@vite/',
+  '/@fs/',
+  '/@react-refresh',
+  '/.vite/',
+  '/node_modules/.vite/',
+]
 
 export type AuthGateNext = (ctx?: unknown) => Promise<unknown>
 export type AuthGateInvocation = {
