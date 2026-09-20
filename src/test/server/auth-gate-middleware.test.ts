@@ -38,7 +38,28 @@ describe('authGateMiddleware', () => {
   })
 
   it('passes through exempt path prefixes', async () => {
-    for (const path of ['/assets/index-abc123.js', '/assets/styles.css', '/favicon.ico']) {
+    for (const path of [
+      // Production-style hashed assets
+      '/assets/index-abc123.js',
+      '/assets/styles.css',
+      '/favicon.ico',
+      // Vite dev-server source modules (broken-by-missing-exemption bug:
+      // gating /src/* redirected login page's <script type=module> imports
+      // to /login, returning HTML with text/html MIME — see fix commit).
+      '/src/styles.css',
+      '/src/main.tsx',
+      '/src/components/auth/login-screen.tsx',
+      // Vite virtual modules
+      '/@id/virtual:tanstack-start-dev-client-entry',
+      '/@id/virtual:@tanstack/start-client-manifest',
+      // Vite client runtime + HMR
+      '/@vite/client',
+      '/@react-refresh',
+      // Vite file-system access + internal cache
+      '/@fs/Users/x/repo/src/main.tsx',
+      '/.vite/deps/react.js',
+      '/node_modules/.vite/deps/react.js',
+    ]) {
       const res = await invoke(new Request(`http://localhost${path}`))
       expect(res.status).toBe(200)
     }
