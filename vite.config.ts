@@ -468,6 +468,17 @@ const config = defineConfig(({ mode, command }) => {
       // Production mirror lives in src/server-entry.ts (wraps the SSR
       // fetch directly so the gate runs inside the SSR process and
       // shares the in-memory token store).
+      //
+      // CRITICAL: do NOT consume the request body here. TanStack Start
+      // (via srvx in vite dev) attaches `req.on('end')` on the SAME
+      // IncomingMessage to know when body bytes are exhausted. If we
+      // drain `req` first, that 'end' event fires before srvx attaches
+      // its listener and srvx then waits forever for body data that
+      // will never arrive — the entire POST hangs until the client
+      // times out (90+ s). This bit us hard: every POST /api/auth with
+      // a JSON body hung, but POSTs with empty bodies or that returned
+      // 415 before any body read worked fine. The gate only inspects
+      // cookies anyway, so we can pass the body through untouched.
       {
         name: 'auth-gate-dev',
         configureServer(server) {
@@ -486,24 +497,12 @@ const config = defineConfig(({ mode, command }) => {
                   )
                 }
               }
-              let body: Buffer | null = null
-              if (
-                req.method &&
-                req.method !== 'GET' &&
-                req.method !== 'HEAD'
-              ) {
-                body = await new Promise<Buffer>((resolve) => {
-                  const chunks: Buffer[] = []
-                  req.on('data', (chunk: Buffer) => chunks.push(chunk))
-                  req.on('end', () => resolve(Buffer.concat(chunks)))
-                })
-              }
+              // Pass `null` body — TanStack Start / srvx will read the
+              // raw `req` stream itself when it actually needs the body.
               const request = new Request(url.toString(), {
                 method: req.method || 'GET',
                 headers,
-                body: body && body.length > 0 ? body : null,
-                // @ts-expect-error duplex is required for streaming bodies in Node fetch
-                duplex: 'half',
+                body: null,
               })
               await authGateMiddleware({
                 request,
