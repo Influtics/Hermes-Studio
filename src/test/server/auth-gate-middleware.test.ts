@@ -59,6 +59,17 @@ describe('authGateMiddleware', () => {
       '/@fs/Users/x/repo/src/main.tsx',
       '/.vite/deps/react.js',
       '/node_modules/.vite/deps/react.js',
+      // pnpm nested deps — regression for the deployed /login page
+      // breaking with "Failed to load module script (MIME type text/html)".
+      // Before the broader /node_modules/ exemption, only /node_modules/.vite/
+      // was on the list, so /node_modules/.pnpm/<name>@<version>/node_modules/
+      // <name>/... was 302'd to /login and the login page's <script type=module>
+      // imports came back as HTML. Pin the prefix here so a future narrow
+      // edit (e.g. someone dropping the broad prefix back to /node_modules/.vite/)
+      // fails the test instead of breaking prod.
+      '/node_modules/.pnpm/react@18.3.1/node_modules/react/index.js',
+      '/node_modules/.pnpm/@tanstack+react-router@1.95.0_@tanstack+router-core@1.95.0_/node_modules/@tanstack/react-router/dist/esm/index.js',
+      '/node_modules/lodash-es/lodash.js',
     ]) {
       const res = await invoke(new Request(`http://localhost${path}`))
       expect(res.status).toBe(200)

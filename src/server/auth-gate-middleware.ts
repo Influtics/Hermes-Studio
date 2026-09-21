@@ -18,14 +18,16 @@ import {
  * (below) — they are hashed/immutable and must load so the login page can render.
  *
  * Vite dev-server paths (/src/, /@id/, /@vite/, /@fs/, /@react-refresh,
- * /.vite/, /node_modules/.vite/) are also exempted: in dev mode (Coolify
- * currently serves `vite dev`, not a production build) the browser pulls
- * every source file and HMR module through the dev server. Gating any of
- * them would 302 them to /login, and the login page's own <script type=module>
- * imports would return HTML — breaking the page with a "Failed to load module
- * script (MIME type text/html)" error. The production bundler rewrites these
- * to hashed /assets/* paths at build time, so the exemption is dev-only by
- * design.
+ * /.vite/, /node_modules/) are also exempted: in dev mode (Coolify currently
+ * serves `vite dev`, not a production build) the browser pulls every source
+ * file, HMR module, and pnpm-nested dependency through the dev server. The
+ * /node_modules/ prefix is intentionally broad — pnpm hoists packages into
+ * .pnpm/<name>@<version>/node_modules/<name>/... which would otherwise match
+ * nothing on the older /node_modules/.vite/ rule and be 302'd to /login.
+ * Gating any of these would return HTML for a <script type=module> import
+ * — breaking the page with a "Failed to load module script (MIME type
+ * text/html)" error. The production bundler rewrites these to hashed
+ * /assets/* paths at build time, so the exemption is dev-only by design.
  */
 const EXEMPT_PATHS: ReadonlySet<string> = new Set([
   '/login',
@@ -46,7 +48,11 @@ const EXEMPT_PREFIXES: readonly string[] = [
   '/@fs/',
   '/@react-refresh',
   '/.vite/',
-  '/node_modules/.vite/',
+  // Broad /node_modules/ exemption (was /node_modules/.vite/ until pnpm
+  // nested paths like /node_modules/.pnpm/<name>@<ver>/node_modules/<name>/...
+  // started landing here as 302s). The production build hashes everything
+  // under /assets/ so this is dev-only.
+  '/node_modules/',
 ]
 
 export type AuthGateNext = (ctx?: unknown) => Promise<unknown>
