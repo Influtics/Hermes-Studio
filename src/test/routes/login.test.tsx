@@ -173,9 +173,54 @@ describe('LoginPage', () => {
     })
   })
 
-  it('disables submit button when password is empty', () => {
+  it('does NOT disable the submit button when password is empty (regression: see PR follow-up)', () => {
+    // Regression for the "Sign-in button not clickable" bug on the deployed
+    // /login route: the SSR-rendered button was hardcoded `disabled=""`
+    // because `password` started as `''`, so `disabled={submitting || !password}`
+    // gated the button on a value React hadn't seen yet. The input had no
+    // visual disabled state (cursor stayed `pointer`, no opacity), so the
+    // button looked alive but never fired a submit event. The fix drops the
+    // `!password` gate and trusts the input's `required` attribute to block
+    // empty submits at the browser level. This test pins that behavior in
+    // place — if anyone re-adds the `!password` gate, the SSR'd page will
+    // be unclickable again on first paint.
     render(<LoginPage onAuthenticated={vi.fn()} />)
     const btn = screen.getByRole('button', { name: /sign in/i })
-    expect(btn.hasAttribute('disabled')).toBe(true)
+    expect(btn.hasAttribute('disabled')).toBe(false)
+    expect(screen.getByLabelText(/password/i).hasAttribute('required')).toBe(
+      true,
+    )
+  })
+
+  it('submits the live DOM password value, not the React state value (paste-before-hydration case)', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      defaultAuthCheckResponse,
+    )
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    })
+
+    render(<LoginPage onAuthenticated={vi.fn()} />)
+
+    // Simulate the paste-before-hydration race: directly write to the DOM
+    // input's `value` (the same path password-manager fills use), then click
+    // the button WITHOUT firing the React onChange. The submit handler must
+    // read the live DOM value via the ref — it must NOT POST with the empty
+    // React state, which would 401 and burn the user's paste.
+    const input = screen.getByLabelText(/password/i) as HTMLInputElement
+    input.value = 'pasted-secret'
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/auth',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ password: 'pasted-secret' }),
+        }),
+      ),
+    )
   })
 })

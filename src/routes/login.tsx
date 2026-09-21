@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * Extracted component for testability — pure UI + state, no router dependencies.
@@ -10,6 +10,12 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Read the live DOM input at submit time. The `password` state can lag
+  // behind the actual input — e.g. when the user types before React
+  // hydrates, or pastes via the password manager before the first onChange
+  // has fired. `password === '' && inputRef.current.value === 'secret'`
+  // would otherwise POST with the empty state and fail authentication.
+  const passwordRef = useRef<HTMLInputElement>(null)
 
   // Client-side auth-check on mount: already-authenticated users skip the form.
   // Network errors here are non-fatal — user can still attempt to log in.
@@ -29,6 +35,12 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // Prefer the live DOM value over React state. The browser's `required`
+    // attribute already blocked an empty submit at the form level, so we
+    // trust whatever the input holds. Falls back to state when the ref
+    // hasn't been attached yet (theoretical — ref is set on first render).
+    const submittedPassword = passwordRef.current?.value ?? password
+    if (!submittedPassword) return
     setSubmitting(true)
     setError(null)
     try {
@@ -36,7 +48,7 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password: submittedPassword }),
       })
       if (res.ok) {
         onAuthenticated()
@@ -84,6 +96,7 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
           Password
         </label>
         <input
+          ref={passwordRef}
           id="password"
           type="password"
           value={password}
@@ -117,7 +130,7 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
 
         <button
           type="submit"
-          disabled={submitting || !password}
+          disabled={submitting}
           style={{
             width: '100%',
             padding: '0.75rem',
