@@ -140,7 +140,7 @@ describe('LoginPage', () => {
     expect(onAuth).not.toHaveBeenCalled()
   })
 
-  it('disables submit button while submitting', async () => {
+  it('keeps the button clickable while submitting and shows a "Signing in…" label', async () => {
     let resolveFetch: ((value: unknown) => void) | null = null
     ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       defaultAuthCheckResponse,
@@ -158,19 +158,77 @@ describe('LoginPage', () => {
       target: { value: 'pw' },
     })
 
-    const btn = screen.getByRole('button', { name: /sign in/i })
+    const btn = screen.getByRole('button', { name: /sign in|signing in/i })
     expect(btn.hasAttribute('disabled')).toBe(false)
 
     fireEvent.click(btn)
 
-    await waitFor(() => expect(btn.hasAttribute('disabled')).toBe(true))
-    expect(btn.textContent).toMatch(/signing in/i)
+    // Button stays clickable (NOT disabled) while the request is in flight,
+    // but the label changes to give the user feedback.
+    await waitFor(() => expect(btn.textContent).toMatch(/signing in/i))
+    expect(btn.hasAttribute('disabled')).toBe(false)
 
     // Resolve the pending fetch so React can finish updating
     await act(async () => {
       resolveFetch!({ ok: true, status: 200, json: async () => ({}) })
       await Promise.resolve()
     })
+  })
+
+  it('silently drops duplicate submits while the request is in flight (re-entrancy guard)', async () => {
+    let resolveFetch: ((value: unknown) => void) | null = null
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      defaultAuthCheckResponse,
+    )
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve
+        }),
+    )
+
+    render(<LoginPage onAuthenticated={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText(/password/i), {
+      target: { value: 'pw' },
+    })
+
+    const btn = screen.getByRole('button', { name: /sign in|signing in/i })
+
+    // Three rapid clicks — fetch should only fire once (auth-check is the
+    // first call; the auth POST is the second and should not be repeated).
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+
+    // Give the click handlers a tick to settle.
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const authCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .filter((c) => c[0] === '/api/auth')
+    expect(authCalls).toHaveLength(1)
+
+    // Cleanup: resolve the in-flight fetch so React can settle.
+    await act(async () => {
+      resolveFetch!({ ok: true, status: 200, json: async () => ({}) })
+      await Promise.resolve()
+    })
+  })
+
+  it('never disables the submit button in any state (regression: no `disabled` attr ever)', () => {
+    // Pins the "do not disable button at all" UX choice. Disabling the
+    // button breaks screen-reader focus, hides the affordance from sighted
+    // users, and makes the page look frozen on slow networks. Re-entrancy
+    // is handled by a ref guard inside handleSubmit, not by disabling the
+    // button.
+    render(<LoginPage onAuthenticated={vi.fn()} />)
+    const btn = screen.getByRole('button', { name: /sign in/i })
+    expect(btn.hasAttribute('disabled')).toBe(false)
+
+    const input = screen.getByLabelText(/password/i)
+    expect(input.hasAttribute('disabled')).toBe(false)
   })
 
   it('does NOT disable the submit button when password is empty (regression: see PR follow-up)', () => {

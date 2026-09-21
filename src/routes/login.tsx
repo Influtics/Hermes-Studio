@@ -16,6 +16,14 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
   // has fired. `password === '' && inputRef.current.value === 'secret'`
   // would otherwise POST with the empty state and fail authentication.
   const passwordRef = useRef<HTMLInputElement>(null)
+  // Re-entrancy guard for handleSubmit. We intentionally do NOT disable the
+  // submit button while the request is in flight — disabling the button
+  // breaks screen-reader focus, hides the affordance from sighted users,
+  // and makes the page look frozen on slow networks. Instead we keep the
+  // button always-clickable and silently drop duplicate submits via this
+  // ref. `submitting` (React state) still drives the visible "Signing in…"
+  // label so the user knows the request is in flight.
+  const submittingRef = useRef(false)
 
   // Client-side auth-check on mount: already-authenticated users skip the form.
   // Network errors here are non-fatal — user can still attempt to log in.
@@ -35,12 +43,18 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // Re-entrancy guard: silently drop duplicate submits while a request
+    // is in flight. The button stays clickable (no `disabled` attr), so a
+    // frantic user clicking again sees no broken affordance — they just
+    // don't trigger a second POST.
+    if (submittingRef.current) return
     // Prefer the live DOM value over React state. The browser's `required`
     // attribute already blocked an empty submit at the form level, so we
     // trust whatever the input holds. Falls back to state when the ref
     // hasn't been attached yet (theoretical — ref is set on first render).
     const submittedPassword = passwordRef.current?.value ?? password
     if (!submittedPassword) return
+    submittingRef.current = true
     setSubmitting(true)
     setError(null)
     try {
@@ -61,6 +75,7 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
     } catch {
       setError('Network error')
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -104,7 +119,6 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
           required
           autoFocus
           autoComplete="current-password"
-          disabled={submitting}
           style={{
             width: '100%',
             padding: '0.75rem',
@@ -130,7 +144,6 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
 
         <button
           type="submit"
-          disabled={submitting}
           style={{
             width: '100%',
             padding: '0.75rem',
@@ -138,7 +151,7 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) 
             background: 'var(--theme-primary, #4f8ef7)',
             color: 'white',
             border: 'none',
-            cursor: submitting ? 'not-allowed' : 'pointer',
+            cursor: 'pointer',
           }}
         >
           {submitting ? 'Signing in…' : 'Sign in'}
