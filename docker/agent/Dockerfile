@@ -62,7 +62,17 @@ p.write_text(src)
 print("patch: _parse_bool injected")
 PY
 
-RUN pip install --no-cache-dir -e .
+# Install hermes-agent with the [mcp] extra. The `mcp` SDK is declared in
+# pyproject.toml under [project.optional-dependencies], not [project]
+# dependencies, so a plain `pip install -e .` skips it. Without the SDK
+# installed, `tools/mcp_tool.py:_MCP_AVAILABLE` stays False and
+# `discover_mcp_tools()` short-circuits at line 3305 — the gateway then
+# reports "no MCP servers configured" regardless of what's in
+# ~/.hermes/config.yaml. Symptom: mcp_servers.metabase is rendered into
+# config.yaml by the entrypoint, but the agent says it sees no Metabase
+# tools. Adding `[mcp]` pulls in mcp==1.26.0 and the transitive deps the
+# SDK needs.
+RUN pip install --no-cache-dir -e ".[mcp]"
 
 # Wrapper entrypoint: when MINIMAX_API_KEY is set, drop Anthropic credentials
 # so the upstream router can't send MiniMax's key to api.anthropic.com as a
