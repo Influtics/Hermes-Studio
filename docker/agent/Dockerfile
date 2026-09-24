@@ -74,6 +74,15 @@ PY
 # SDK needs.
 RUN pip install --no-cache-dir -e ".[mcp]"
 
+# Install the Grafana MCP stdio server (mcp-grafana). The agent's
+# mcp_servers.grafana block (rendered by entrypoint.sh when GRAFANA_API_KEY
+# is set) spawns `mcp-grafana` as a subprocess, so it must be on PATH. The
+# image ships neither `uvx` nor `mcp-grafana` by default — installing the
+# server directly via pip is simpler than depending on `uvx`. Pinned to a
+# known-good release that supports Grafana 10.x and 11.x; bump deliberately
+# when Grafana-side APIs change.
+RUN pip install --no-cache-dir "mcp-grafana==0.2.2"
+
 # Wrapper entrypoint: when MINIMAX_API_KEY is set, drop Anthropic credentials
 # so the upstream router can't send MiniMax's key to api.anthropic.com as a
 # fallback (visible symptom: studio's /api/skills returns 500 with
