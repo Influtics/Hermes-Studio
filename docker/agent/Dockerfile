@@ -78,10 +78,12 @@ RUN pip install --no-cache-dir -e ".[mcp]"
 # mcp_servers.grafana block (rendered by entrypoint.sh when GRAFANA_API_KEY
 # is set) spawns `mcp-grafana` as a subprocess, so it must be on PATH. The
 # image ships neither `uvx` nor `mcp-grafana` by default — installing the
-# server directly via pip is simpler than depending on `uvx`. Pinned to a
-# known-good release that supports Grafana 10.x and 11.x; bump deliberately
-# when Grafana-side APIs change.
-RUN pip install --no-cache-dir "mcp-grafana==0.2.2"
+# server directly via pip is simpler than depending on `uvx`. Pinned to
+# 1.6.0 (latest release on PyPI at the time of pinning): pure-Python
+# (`py3`, no binary wheels), `Requires-Python: >=3.10`, so it works fine on
+# this image's `python:3.11-slim` base. Bump deliberately when
+# mcp-grafana's Grafana-API surface drifts.
+RUN pip install --no-cache-dir "mcp-grafana==1.6.0"
 
 # Wrapper entrypoint: when MINIMAX_API_KEY is set, drop Anthropic credentials
 # so the upstream router can't send MiniMax's key to api.anthropic.com as a
