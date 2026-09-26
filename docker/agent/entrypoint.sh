@@ -16,14 +16,14 @@
 #    TELEGRAM_BOT_TOKEN is in the environment.
 #
 # 3. If any MCP server env var is set (METABASE_API_KEY, GRAFANA_API_KEY,
-#    SENTRY_AUTH_TOKEN), append one consolidated `mcp_servers:` block whose
-#    children are the server entries whose env var is non-empty. The fork's
-#    MCP server registry defaults to off; without explicit YAML entries,
-#    the gateway ignores the env vars even when set. The merge matters:
-#    if the script wrote a separate top-level `mcp_servers:` block per
-#    server, PyYAML last-wins on duplicate keys and any earlier server
-#    would silently drop on the next config reload. Consolidating into
-#    one block is the only way to keep multiple servers registered.
+#    SENTRY_AUTH_TOKEN, GITHUB_TOKEN), append one consolidated `mcp_servers:`
+#    block whose children are the server entries whose env var is non-empty.
+#    The fork's MCP server registry defaults to off; without explicit YAML
+#    entries, the gateway ignores the env vars even when set. The merge
+#    matters: if the script wrote a separate top-level `mcp_servers:` block
+#    per server, PyYAML last-wins on duplicate keys and any earlier server
+#    would silently drop on the next config reload. Consolidating into one
+#    block is the only way to keep multiple servers registered.
 #
 #    Currently supported servers (gated by env var):
 #
@@ -39,6 +39,17 @@
 #    - sentry: HTTP transport to the Sentry-hosted MCP
 #      (`https://mcp.sentry.dev/mcp`). Bearer auth via SENTRY_AUTH_TOKEN.
 #      Gated by SENTRY_AUTH_TOKEN.
+#
+#    - github: stdio transport via `npx -y @modelcontextprotocol/server-github`
+#      (uses the bundled Node 22 — see Dockerfile's xz-utils rationale). The
+#      subprocess talks directly to api.github.com using a GitHub PAT exposed
+#      as `GITHUB_PERSONAL_ACCESS_TOKEN`. We deliberately avoid GitHub's
+#      hosted `api.githubcopilot.com/mcp/` endpoint: it historically tied to
+#      a Copilot subscription and a separate auth layer that might filter
+#      orgs; the stdio server hits api.github.com with whatever scopes the
+#      PAT has, so "Influtics org access" is purely a token-scoping question.
+#      Gated by GITHUB_TOKEN. First call triggers an `npx` package fetch
+#      (cached after), so add ~5-10 s of warm-up to the first MCP tool call.
 #
 #    Env-driven blocks use `>>` (append), so the platforms block (step 2)
 #    and the MCP servers block (step 3) compose into one config.yaml
@@ -70,7 +81,7 @@ mkdir -p "$HERMES_HOME"
 #    redeploys where the env-var set shrinks (e.g. METABASE_API_KEY was
 #    set, then unset in Coolify — we want no `mcp_servers:` block at
 #    all, not a stale one from the previous container).
-if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ]; then
+if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ]; then
   : > "$HERMES_HOME/config.yaml"
 fi
 
@@ -110,7 +121,13 @@ fi
 #
 #    sentry: HTTP transport to the Sentry-hosted MCP
 #      (`https://mcp.sentry.dev/mcp`). Bearer auth via SENTRY_AUTH_TOKEN.
-if [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ]; then
+#
+#    github: stdio transport — the gateway spawns `npx -y
+#      @modelcontextprotocol/server-github` as a subprocess. The bundled
+#      Node 22 (xz-utils rationale in Dockerfile) provides `npx`. The PAT
+#      flows through as `GITHUB_PERSONAL_ACCESS_TOKEN` — the env var name
+#      the stdio server reads.
+if [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ]; then
   {
     echo "mcp_servers:"
     [ -n "$METABASE_API_KEY" ] && cat <<EOSERVER
@@ -132,11 +149,18 @@ EOSERVER
     headers:
       Authorization: Bearer ${SENTRY_AUTH_TOKEN}
 EOSERVER
+    [ -n "$GITHUB_TOKEN" ] && cat <<EOSERVER
+  github:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+EOSERVER
   } >> "$HERMES_HOME/config.yaml"
 fi
 
 # Lock file perms if any env-driven block was written.
-if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ]; then
+if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ]; then
   chmod 600 "$HERMES_HOME/config.yaml"
 fi
 
