@@ -60,13 +60,39 @@
 #    container, which is recreated on every redeploy. File perms are 600
 #    so the tokens aren't world-readable inside the container.
 #
-# 4. If MINIMAX_API_KEY is set, unset ANTHROPIC_API_KEY + ANTHROPIC_TOKEN.
+# 4. If HERMES_MODEL is set, render the `model:` block. This is the single
+#    knob that makes every platform — web UI and Telegram alike — use the
+#    same model. Two reasons it has to live in config.yaml:
+#
+#    - hermes-agent stopped reading LLM_MODEL from .env (see its .env.example:
+#      "LLM_MODEL is no longer read from .env"). The model is read from
+#      config.yaml's `model.default` only. An LLM_MODEL env var is a no-op.
+#
+#    - API_SERVER_MODEL_NAME (gateway/config.py) binds a model to
+#      Platform.API_SERVER alone, so setting it fixes the web path and leaves
+#      Telegram on the provider profile's own default. That is exactly the
+#      split where web reports MiniMax-M3 and Telegram reports MiniMax-M2.7.
+#      `model.default` is platform-agnostic and closes it at the source.
+#
+#    provider and default are read as separate keys (run.py: `_model_cfg.get
+#    ("provider")`, `.get("default")`), so HERMES_MODEL is the bare model id
+#    and HERMES_MODEL_PROVIDER is the provider name.
+#
+#    context_length overrides the agent's hardcoded MiniMax entry. In
+#    agent/model_metadata.py the provider defaults to 204,800 ("official
+#    docs: 204,800 context for all models"), and unmapped models fall back to
+#    DEFAULT_FALLBACK_CONTEXT = 256,000. Neither is 512k, so without an
+#    explicit value the agent's own budget disagrees with the real window.
+#    This key is read as `model.context_length` (run.py) and takes precedence
+#    over the metadata table.
+#
+# 5. If MINIMAX_API_KEY is set, unset ANTHROPIC_API_KEY + ANTHROPIC_TOKEN.
 #    The agent's auxiliary client can fall back to Anthropic after a
 #    primary-provider error and send MiniMax's key to api.anthropic.com,
 #    which rejects it with "Invalid API Key". studio surfaces that as:
 #    Skills: HTTP 500. Stripping the conflicting creds is the fix.
 #
-# 5. exec the gateway (hermes gateway run).
+# 6. exec the gateway (hermes gateway run).
 
 set -e
 
@@ -81,7 +107,7 @@ mkdir -p "$HERMES_HOME"
 #    redeploys where the env-var set shrinks (e.g. METABASE_API_KEY was
 #    set, then unset in Coolify — we want no `mcp_servers:` block at
 #    all, not a stale one from the previous container).
-if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ]; then
+if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ] || [ -n "$HERMES_MODEL" ]; then
   : > "$HERMES_HOME/config.yaml"
 fi
 
@@ -159,8 +185,26 @@ EOSERVER
   } >> "$HERMES_HOME/config.yaml"
 fi
 
+# 4. Render the `model:` block when HERMES_MODEL is set. The block is
+#    emitted last so it composes with the platforms/mcp_servers blocks above
+#    into one config.yaml. See the step-4 note in the header for why this
+#    lives in config.yaml rather than an LLM_MODEL env var, and why
+#    API_SERVER_MODEL_NAME doesn't cover Telegram.
+#
+#    The `model:` key is distinct from `platforms:` and `mcp_servers:`, so
+#    appending it here is safe — PyYAML merges top-level keys from a single
+#    document and there is no duplicate `model:` writer.
+if [ -n "$HERMES_MODEL" ]; then
+  {
+    echo "model:"
+    [ -n "$HERMES_MODEL_PROVIDER" ] && echo "  provider: \"$HERMES_MODEL_PROVIDER\""
+    echo "  default: \"$HERMES_MODEL\""
+    [ -n "$HERMES_MODEL_CONTEXT_LENGTH" ] && echo "  context_length: $HERMES_MODEL_CONTEXT_LENGTH"
+  } >> "$HERMES_HOME/config.yaml"
+fi
+
 # Lock file perms if any env-driven block was written.
-if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ]; then
+if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ] || [ -n "$HERMES_MODEL" ]; then
   chmod 600 "$HERMES_HOME/config.yaml"
 fi
 

@@ -23,13 +23,6 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'o3-mini': 200_000,
   'gemini-2.5-flash': 1_000_000,
   'gemini-2.5-pro': 1_000_000,
-  // MiniMax is served through the agent's anthropic_messages adapter, so the
-  // model string is the only signal. Keys are ordered longest-first: the
-  // substring fallback in getContextWindow() returns on the first match, so
-  // 'MiniMax-M3' must come after the 3.1 entry or an unmapped M3 variant would
-  // still resolve — correctly, here, but by accident rather than by intent.
-  'MiniMax-M3.1-Flash-Preview': 512_000,
-  'MiniMax-M3': 512_000,
 }
 
 function getContextWindow(model: string): number {

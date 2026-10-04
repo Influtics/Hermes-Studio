@@ -43,10 +43,15 @@ services:
       # is pre-wired for api_mode=anthropic_messages + base_url=https://api.minimax.io/anthropic,
       # so setting MINIMAX_API_KEY is the entire env delta (no ANTHROPIC_BASE_URL hack).
       MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
-      # Default model the gateway uses when none is selected in the UI.
-      # hermes-agent's MiniMax profile default_aux_model is MiniMax-M2.7 (fork variant);
-      # this env var overrides it for the user-selected model.
-      LLM_MODEL: ${LLM_MODEL:-MiniMax-M3.1-Flash-Preview}
+      # NOTE: there is deliberately no LLM_MODEL here. hermes-agent stopped
+      # reading it from .env — the model is configured in ~/.hermes/config.yaml
+      # under `model.default`, which docker/agent/entrypoint.sh renders from
+      # HERMES_MODEL / HERMES_MODEL_PROVIDER / HERMES_MODEL_CONTEXT_LENGTH.
+      #
+      # Coolify deploys the agent as a standalone Dockerfile app
+      # (build_pack=dockerfile, dockerfile_location=/docker/agent/Dockerfile),
+      # not as a compose service, so this file is local-dev only and Coolify
+      # never reads it. Production env vars are set in the Coolify UI.
       # Opt-in HTTP API server (port 8642). Without this, the gateway serves
       # messaging platforms only and never binds 8642 — the healthcheck
       # curl fails, depends_on service_healthy cascades, hermes-studio never
