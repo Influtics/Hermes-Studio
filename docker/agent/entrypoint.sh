@@ -16,7 +16,7 @@
 #    TELEGRAM_BOT_TOKEN is in the environment.
 #
 # 3. If any MCP server env var is set (METABASE_API_KEY, GRAFANA_API_KEY,
-#    SENTRY_AUTH_TOKEN, GITHUB_TOKEN), append one consolidated `mcp_servers:`
+#    SENTRY_AUTH_TOKEN, GITHUB_TOKEN, POSTHOG_API_KEY), append one consolidated `mcp_servers:`
 #    block whose children are the server entries whose env var is non-empty.
 #    The fork's MCP server registry defaults to off; without explicit YAML
 #    entries, the gateway ignores the env vars even when set. The merge
@@ -39,6 +39,20 @@
 #    - sentry: HTTP transport to the Sentry-hosted MCP
 #      (`https://mcp.sentry.dev/mcp`). Bearer auth via SENTRY_AUTH_TOKEN.
 #      Gated by SENTRY_AUTH_TOKEN.
+#
+#    - posthog: HTTP transport to the PostHog-hosted MCP
+#      (`https://mcp.posthog.com/mcp`). Auth via a personal API key
+#      (`phx_…`) as `Authorization: Bearer` — the same header shape as
+#      sentry. The hosted gateway normally authenticates by OAuth, which a
+#      headless container cannot complete, so the API key is the only
+#      workable path here. Gated by POSTHOG_API_KEY.
+#      POSTHOG_ORGANIZATION_ID / POSTHOG_PROJECT_ID are optional and pin the
+#      server to one org/project via the `x-posthog-organization-id` /
+#      `x-posthog-project-id` headers. Pinning removes the
+#      `switch-organization` / `switch-project` tools, so a pinned agent
+#      cannot wander into another project of the same account. Unset means
+#      account-wide access — the key's own permissions are then the only
+#      boundary. Added in PR #22.
 #
 #    - github: stdio transport via `npx -y @modelcontextprotocol/server-github`
 #      (uses the bundled Node 22 — see Dockerfile's xz-utils rationale). The
@@ -107,7 +121,14 @@ mkdir -p "$HERMES_HOME"
 #    redeploys where the env-var set shrinks (e.g. METABASE_API_KEY was
 #    set, then unset in Coolify — we want no `mcp_servers:` block at
 #    all, not a stale one from the previous container).
-if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ] || [ -n "$HERMES_MODEL" ]; then
+#
+#    CONFIG_RENDERED is the single "did anything get written" flag: the
+#    truncate here and the chmod at the end both need that answer, and
+#    restating the full env-var list twice was the part of this file most
+#    likely to drift out of sync when a server is added.
+CONFIG_RENDERED=""
+if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ] || [ -n "$POSTHOG_API_KEY" ] || [ -n "$HERMES_MODEL" ]; then
+  CONFIG_RENDERED=1
   : > "$HERMES_HOME/config.yaml"
 fi
 
@@ -153,7 +174,17 @@ fi
 #      Node 22 (xz-utils rationale in Dockerfile) provides `npx`. The PAT
 #      flows through as `GITHUB_PERSONAL_ACCESS_TOKEN` — the env var name
 #      the stdio server reads.
-if [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ]; then
+#
+#    posthog: HTTP transport — PostHog's hosted MCP at
+#      `https://mcp.posthog.com/mcp`, Bearer-authenticated with a personal
+#      API key. The optional org/project pins are emitted as sibling
+#      headers under the same `headers:` key, so they must land AFTER the
+#      `Authorization:` line that opens the mapping — hence the explicit
+#      if/fi rather than the `[ -n … ] &&` one-liners used above. A
+#      `[ -n "$X" ] && echo …` as the last command of this group would
+#      return non-zero when $X is empty and `set -e` would kill the
+#      container on the way to `exec "$@"`.
+if [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ] || [ -n "$POSTHOG_API_KEY" ]; then
   {
     echo "mcp_servers:"
     [ -n "$METABASE_API_KEY" ] && cat <<EOSERVER
@@ -182,6 +213,20 @@ EOSERVER
     env:
       GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
 EOSERVER
+    if [ -n "$POSTHOG_API_KEY" ]; then
+      cat <<EOSERVER
+  posthog:
+    url: https://mcp.posthog.com/mcp
+    headers:
+      Authorization: Bearer ${POSTHOG_API_KEY}
+EOSERVER
+      if [ -n "$POSTHOG_ORGANIZATION_ID" ]; then
+        echo "      x-posthog-organization-id: \"${POSTHOG_ORGANIZATION_ID}\""
+      fi
+      if [ -n "$POSTHOG_PROJECT_ID" ]; then
+        echo "      x-posthog-project-id: \"${POSTHOG_PROJECT_ID}\""
+      fi
+    fi
   } >> "$HERMES_HOME/config.yaml"
 fi
 
@@ -204,7 +249,7 @@ if [ -n "$HERMES_MODEL" ]; then
 fi
 
 # Lock file perms if any env-driven block was written.
-if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ] || [ -n "$HERMES_MODEL" ]; then
+if [ -n "$CONFIG_RENDERED" ]; then
   chmod 600 "$HERMES_HOME/config.yaml"
 fi
 
