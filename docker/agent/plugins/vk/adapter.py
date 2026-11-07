@@ -85,10 +85,16 @@ PEER_ID_USER_OFFSET = 2000000001
 MESSAGE_NEW_UPDATE = 4
 
 
-def _parse_wait(value: Optional[str]) -> int:
-    """Parse ``VK_LONGPOLL_WAIT`` into a sane Long Poll wait in seconds."""
+def _parse_wait(value: Any) -> int:
+    """Parse ``VK_LONGPOLL_WAIT`` into a sane Long Poll wait in seconds.
+
+    Accepts a string (straight from the environment) or an int (once the
+    config seed has already parsed it) — ``_env_enablement()`` seeds
+    ``longpoll_wait`` as an int, and that seed is what comes back as
+    ``config.extra`` when the adapter is constructed. Both must work.
+    """
     try:
-        wait = int((value or "").strip())
+        wait = int(str(value).strip())
     except (TypeError, ValueError):
         return LONGPOLL_DEFAULT_WAIT
     if wait < 10:

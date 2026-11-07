@@ -140,6 +140,46 @@ class TestEnvEnablement:
 
 
 # ---------------------------------------------------------------------------
+# 2b. The seed -> adapter round trip
+# ---------------------------------------------------------------------------
+
+
+class TestSeedRoundTrip:
+    """`_env_enablement()` seeds the config the adapter is later built from.
+
+    The seed is not a plain dict of strings: `longpoll_wait` is seeded as
+    an int, and that seed comes back as `config.extra` when the gateway
+    constructs the adapter. Every field therefore has to survive the trip
+    in the type it was seeded in — a type mismatch here does not raise at
+    seed time, it raises inside the adapter constructor and takes the whole
+    platform down with "Failed to create adapter for platform 'VK'".
+    """
+
+    def test_seed_longpoll_wait_is_usable_by_the_adapter(self, vk, monkeypatch):
+        monkeypatch.setenv("VK_GROUP_TOKEN", "tok")
+        monkeypatch.setenv("VK_GROUP_ID", "243045540")
+        monkeypatch.setenv("VK_LONGPOLL_WAIT", "30")
+        seed = vk._env_enablement()
+        assert isinstance(seed["longpoll_wait"], int)
+
+        config = PlatformConfig(extra=seed)
+        adapter = vk.VKAdapter(config)
+        assert adapter._poll_wait == 30
+
+    def test_parse_wait_accepts_int_and_str(self, vk):
+        assert vk._parse_wait(25) == 25
+        assert vk._parse_wait("25") == 25
+        assert vk._parse_wait(" 30 ") == 30
+
+    def test_parse_wait_clamps_and_defaults(self, vk):
+        assert vk._parse_wait(5) == 10        # below the floor
+        assert vk._parse_wait(900) == 90      # above the ceiling
+        assert vk._parse_wait(None) == vk.LONGPOLL_DEFAULT_WAIT
+        assert vk._parse_wait("") == vk.LONGPOLL_DEFAULT_WAIT
+        assert vk._parse_wait("not-a-number") == vk.LONGPOLL_DEFAULT_WAIT
+
+
+# ---------------------------------------------------------------------------
 # 3. VkApi — the wire format
 # ---------------------------------------------------------------------------
 
