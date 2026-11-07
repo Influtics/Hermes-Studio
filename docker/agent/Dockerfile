@@ -85,6 +85,19 @@ RUN pip install --no-cache-dir -e ".[mcp]"
 # mcp-grafana's Grafana-API surface drifts.
 RUN pip install --no-cache-dir "mcp-grafana==1.6.0"
 
+# VK platform plugin. The Hermes plugin loader discovers platforms by
+# scanning the filesystem — it reads <repo>/plugins/platforms/*/plugin.yaml
+# and loads each plugin's __init__.py via importlib
+# (spec_from_file_location), not via a normal package import. Copying the
+# directory in is therefore all it takes: bundled platform plugins
+# auto-load, so no `plugins.enabled` entry and no core edits to
+# hermes-agent are required.
+#
+# The destination mirrors the upstream layout exactly (/app is the
+# hermes-agent clone), which is what get_bundled_plugins_dir() resolves to
+# for the editable install.
+COPY docker/agent/plugins/vk /app/plugins/platforms/vk
+
 # Wrapper entrypoint: when MINIMAX_API_KEY is set, drop Anthropic credentials
 # so the upstream router can't send MiniMax's key to api.anthropic.com as a
 # fallback (visible symptom: studio's /api/skills returns 500 with

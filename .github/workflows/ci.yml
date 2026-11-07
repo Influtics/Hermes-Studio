@@ -91,3 +91,26 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  agent-plugin-tests:
+    name: Agent Plugin Tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The VK platform plugin is pure-Python and depends only on httpx
+      # (already a Hermes dependency) plus pytest. The tests stub the two
+      # `gateway.*` modules the plugin imports, so the hermes-agent package
+      # is not needed to run them.
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio "httpx==0.28.1"
+
+      - name: Run VK platform plugin tests
+        run: pytest docker/agent/plugins/vk/tests -v
