@@ -270,8 +270,22 @@ class VkApi:
         re-fetch the longpoll server.
         """
         wait = max(LONGPOLL_MIN_WAIT, min(LONGPOLL_MAX_WAIT, int(wait)))
-        url = f"{server.rstrip('/')}/{key}"
-        params = {"act": "a_check", "ts": ts or "", "wait": wait, "lp_version": LONGPOLL_VERSION}
+        # VK returns `server` as a bare host+path ("lp.vk.com/wh228928227"),
+        # with no scheme, and the longpoll key is a QUERY parameter — the
+        # request is `{server}?act=a_check&key={key}&ts={ts}&wait={wait}`.
+        # Appending the key to the path (and skipping the scheme) builds a
+        # URL httpx cannot dispatch, so the poll fails on every cycle.
+        base = server.rstrip("/")
+        if not base.startswith(("http://", "https://")):
+            base = f"https://{base}"
+        url = base
+        params = {
+            "act": "a_check",
+            "key": key,
+            "ts": ts or "",
+            "wait": wait,
+            "lp_version": LONGPOLL_VERSION,
+        }
 
         try:
             response = await self._client().get(

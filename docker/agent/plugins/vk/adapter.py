@@ -251,7 +251,11 @@ class VKAdapter(BasePlatformAdapter):
                 if server_info is None:
                     server_info = await self._api.get_longpoll_server()
                     logger.info("[%s] Long Poll server acquired", self.name)
-                    backoff_idx = 0
+                    # NOTE: no backoff reset here. Resetting on every
+                    # server fetch meant a poll that always failed re-armed
+                    # at the first backoff step forever — a permanent
+                    # 2-second loop hammering groups.getLongPollServer.
+                    # The reset belongs on a *successful poll*, below.
 
                 payload = await self._api.poll(
                     server_info["server"],
@@ -267,25 +271,23 @@ class VKAdapter(BasePlatformAdapter):
                 if "failed" in payload:
                     # failed=1 → the longpoll key expired; failed=2 → the
                     # event history was lost. Both are fixed by asking VK
-                    # for a fresh server + key. Sleep briefly first so a
-                    # server that keeps rejecting the poll cannot spin
-                    # this loop.
+                    # for a fresh server + key. Fall through to the shared
+                    # backoff below so a server that keeps rejecting the
+                    # poll cannot spin this loop.
                     logger.info(
                         "[%s] Long Poll reported failed=%s — refetching server",
                         self.name, payload.get("failed"),
                     )
                     server_info = None
-                    await asyncio.sleep(RECONNECT_BACKOFF[0])
+                else:
+                    for update in payload.get("updates") or []:
+                        if not self._running:
+                            return
+                        await self._handle_update(update)
+
+                    # Success — re-arm the poll straight away.
+                    backoff_idx = 0
                     continue
-
-                for update in payload.get("updates") or []:
-                    if not self._running:
-                        return
-                    await self._handle_update(update)
-
-                # Success — re-arm the poll straight away.
-                backoff_idx = 0
-                continue
             except asyncio.CancelledError:
                 return
             except VkApiError as e:
