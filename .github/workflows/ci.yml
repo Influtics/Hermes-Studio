@@ -36,7 +36,10 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 12
-          cache: 'pnpm'
+          # `cache` is a BOOLEAN on this action (unlike setup-node, which
+          # takes the string 'pnpm'). Passing 'pnpm' fails the step with
+          # "Input does not meet YAML 1.2 Core Schema specification: cache".
+          cache: true
           cache_dependency_path: |
             package.json
             pnpm-workspace.yaml
@@ -79,7 +82,9 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 12
-          cache: 'pnpm'
+          # `cache` is a BOOLEAN on this action (unlike setup-node, which
+          # takes the string 'pnpm').
+          cache: true
           cache_dependency_path: |
             package.json
             pnpm-workspace.yaml
