@@ -139,3 +139,7 @@ __pycache__/
 .runtime/
 workspace-final-markdown-review.md
 .worktrees/
+# Playwright artifacts (local runs; CI uploads them as build artifacts)
+test-results/
+playwright-report/
+blob-report/
