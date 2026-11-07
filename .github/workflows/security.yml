@@ -23,11 +23,36 @@ jobs:
         with:
           fetch-depth: 0
 
+      # gitleaks-action@v2 requires a GITLEAKS_LICENSE secret for
+      # organisation-owned repositories ("[Influtics] is an organization.
+      # License key is required.") and fails the step without one. The
+      # gitleaks CLI itself is MIT-licensed and needs no key or account,
+      # so run it directly from the official container image instead.
+      #
+      # The report is uploaded as an artifact so a finding can be inspected
+      # without re-running the scan.
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # No additional secrets required - uses built-in GITHUB_TOKEN
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo \
+            --redact \
+            --no-banner \
+            --report-format json \
+            --report-path /repo/gitleaks-report.json
+          status=$?
+          echo "gitleaks exit code: $status"
+          exit $status
+
+      - name: Upload Gitleaks report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Grep for common patterns (fallback)
         if: always()
