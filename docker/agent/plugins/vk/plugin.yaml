@@ -1,0 +1,63 @@
+name: vk-platform
+label: VK
+kind: platform
+version: 1.0.0
+description: >
+  VK (VKontakte) community-messages adapter for Hermes Agent.
+
+  Receives messages sent to a VK community through the Long Poll API and
+  replies via ``messages.send``. No external SDK — only httpx, which is
+  already a Hermes dependency.
+
+  Token-bearing VK API calls can be routed through the Influtics VPS proxy
+  (``https://vk-proxy.influtics.com/vk/api-call``) so that every call
+  egresses from a single static IP. That is what VK requires for
+  IP-locked tokens, and it matches how the rest of the Influtics stack
+  reaches VK (``vk-worker`` → VPS proxy → VK API). The Long Poll poll
+  itself carries no access token and is always direct.
+author: Influtics
+# ``requires_env`` and ``optional_env`` entries are surfaced in the
+# ``hermes config`` UI via the platform-plugin env var injector in
+# ``hermes_cli/config.py``.
+requires_env:
+  - name: VK_GROUP_TOKEN
+    description: "VK community access token with the 'messages' scope (community settings → API usage → access keys)"
+    prompt: "VK community access token"
+    password: true
+  - name: VK_GROUP_ID
+    description: "Numeric VK community id (e.g. 243045540)"
+    prompt: "VK community id"
+    password: false
+optional_env:
+  - name: VK_ALLOWED_USERS
+    description: "Comma-separated VK user ids allowed to talk to the agent (unset = nobody allowed)"
+    prompt: "Allowed VK user ids (comma-separated)"
+    password: false
+  - name: VK_ALLOW_ALL_USERS
+    description: "Allow any VK user to talk to the agent (dev only — disables the allowlist)"
+    prompt: "Allow all VK users? (true/false)"
+    password: false
+  - name: VK_HOME_CHANNEL
+    description: "Default peer id for cron / notification delivery (personal dialog: 2000000001 + user id)"
+    prompt: "VK home channel peer id (or empty)"
+    password: false
+  - name: VK_HOME_CHANNEL_NAME
+    description: "Human label for the VK home channel"
+    prompt: "VK home channel name (or empty)"
+    password: false
+  - name: VK_API_MODE
+    description: "How token-bearing VK API calls are routed: 'proxy' (default) or 'direct'"
+    prompt: "VK API mode (proxy/direct)"
+    password: false
+  - name: VK_PROXY_URL
+    description: "Base URL of the VK API proxy (default: https://vk-proxy.influtics.com)"
+    prompt: "VK proxy URL"
+    password: false
+  - name: VK_PROXY_API_KEY
+    description: "Bearer key for the VK API proxy"
+    prompt: "VK proxy API key"
+    password: true
+  - name: VK_LONGPOLL_WAIT
+    description: "Long Poll wait in seconds (10-90, default 25)"
+    prompt: "Long Poll wait seconds"
+    password: false

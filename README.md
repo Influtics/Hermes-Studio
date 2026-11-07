@@ -599,6 +599,9 @@ The Memory screen's graph view is now a fully interactive force-directed canvas 
 
 - skillsmp.com API key for skill marketplace access
 - Chat platform tokens — set Telegram, Discord, Slack, Signal bot tokens directly from the UI without editing `.env`
+- **VK (VKontakte)** — talk to the agent from a VK community via the
+  Long Poll API. Ships as a platform plugin in the agent image; see
+  [`docker/agent/plugins/vk/README.md`](docker/agent/plugins/vk/README.md)
 
 ### 📁 Files
 

@@ -18,19 +18,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm 12, matching the Dockerfile (`npm install -g pnpm`, which
+      # resolves to the current major). The build-script allowlist lives
+      # in pnpm-workspace.yaml as `allowBuilds:` — that key was introduced
+      # in pnpm 11 and replaced the `onlyBuiltDependencies` field in
+      # package.json. pnpm 10 does not read `allowBuilds`, so it would
+      # ignore the allowlist and fail the install with
+      # ERR_PNPM_IGNORED_BUILDS for better-sqlite3 / esbuild /
+      # unrs-resolver.
+      #
+      # The store is cached by this action rather than by setup-node:
+      # setup-node's `cache: 'pnpm'` derives its key from pnpm-lock.yaml,
+      # which this repo deliberately does not track (see the Dockerfile —
+      # the lockfile is regenerated on install). pnpm-workspace.yaml is
+      # the manifest that actually determines the dependency graph.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 12
+          # `cache` is a BOOLEAN on this action (unlike setup-node, which
+          # takes the string 'pnpm'). Passing 'pnpm' fails the step with
+          # "Input does not meet YAML 1.2 Core Schema specification: cache".
+          cache: true
+          cache_dependency_path: |
+            package.json
+            pnpm-workspace.yaml
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
 
+      # --no-frozen-lockfile because there is no committed pnpm-lock.yaml;
+      # this mirrors the Dockerfile exactly.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Run unit tests
         run: pnpm exec vitest run --reporter=json --outputFile=test-results.json
@@ -59,16 +81,24 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 12
+          # `cache` is a BOOLEAN on this action (unlike setup-node, which
+          # takes the string 'pnpm').
+          cache: true
+          cache_dependency_path: |
+            package.json
+            pnpm-workspace.yaml
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
 
+      # --no-frozen-lockfile because there is no committed pnpm-lock.yaml;
+      # this mirrors the Dockerfile exactly. (In CI, pnpm defaults to
+      # frozen-lockfile, so the flag has to be explicit.)
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
@@ -91,3 +121,26 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  agent-plugin-tests:
+    name: Agent Plugin Tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The VK platform plugin is pure-Python and depends only on httpx
+      # (already a Hermes dependency) plus pytest. The tests stub the two
+      # `gateway.*` modules the plugin imports, so the hermes-agent package
+      # is not needed to run them.
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio "httpx==0.28.1"
+
+      - name: Run VK platform plugin tests
+        run: pytest docker/agent/plugins/vk/tests -v

@@ -18,3 +18,27 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   unrs-resolver: true
+
+# Pin @tanstack/start-plugin-core to the last release that still sets
+# `build.rollupOptions.input` for the client environment.
+#
+# From 1.171.51 onward it sets ONLY `build.rolldownOptions.input`, which
+# is the Vite 8 (rolldown) option. This repo is on Vite 7, which reads
+# `rollupOptions` — so the client environment ends up with no entry and
+# Vite falls back to its default `index.html`, which this repo does not
+# have. The build then fails with:
+#
+#   error during build:
+#   Could not resolve entry module "index.html".
+#
+# Bisected: 1.171.50 sets rollupOptions; 1.171.51 does not.
+#
+# This matters because the repo tracks no pnpm-lock.yaml (see the
+# Dockerfile: the lockfile is regenerated on install), so a fresh
+# resolution picks up whatever is newest — the regression broke CI the
+# moment 1.171.51 was published.
+#
+# Remove this override once the repo moves to Vite 8, or once TanStack
+# restores `rollupOptions` alongside `rolldownOptions`.
+overrides:
+  "@tanstack/start-plugin-core": "1.171.50"
