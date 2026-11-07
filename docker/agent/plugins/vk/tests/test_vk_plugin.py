@@ -341,6 +341,14 @@ class TestVkApi:
         assert body["params"]["lp_version"] == 2
 
     def test_poll_shape(self, vk):
+        """The poll request must match VK's documented Long Poll contract.
+
+        VK returns `server` as a bare host+path with NO scheme
+        ("lp.vk.com/wh228928227"), and the longpoll key is a QUERY
+        parameter — the request is
+        `{server}?act=a_check&key={key}&ts={ts}&wait={wait}`.
+        Putting the key in the path builds a URL httpx cannot dispatch.
+        """
         api = self._api(vk)
         client = MagicMock()
         response = MagicMock()
@@ -349,16 +357,20 @@ class TestVkApi:
         client.get = AsyncMock(return_value=response)
         api._http_client = client
 
-        payload = _run(api.poll("https://lp.vk.com/wh123", "abc", "55", wait=25))
+        payload = _run(api.poll("lp.vk.com/wh123", "abc", "55", wait=25))
 
         assert payload["ts"] == "56"
         url = client.get.await_args.args[0]
-        assert url == "https://lp.vk.com/wh123/abc"
+        assert url == "https://lp.vk.com/wh123"
         params = client.get.await_args.kwargs["params"]
         assert params["act"] == "a_check"
+        assert params["key"] == "abc"
         assert params["ts"] == "55"
         assert params["wait"] == 25
         assert params["lp_version"] == 2
+        # The key is a query parameter, never a path segment.
+        assert not url.endswith("/abc")
+        assert "abc" not in url
 
     def test_poll_does_not_send_the_token(self, vk):
         """The poll URL carries only the longpoll key — never the token."""
@@ -370,7 +382,7 @@ class TestVkApi:
         client.get = AsyncMock(return_value=response)
         api._http_client = client
 
-        _run(api.poll("https://lp.vk.com/wh123", "abc", "55"))
+        _run(api.poll("lp.vk.com/wh123", "abc", "55"))
 
         call_kwargs = client.get.await_args.kwargs
         assert "tok" not in str(call_kwargs)
@@ -385,7 +397,21 @@ class TestVkApi:
         api._http_client = client
 
         with pytest.raises(vk.VkApiError):
-            _run(api.poll("https://lp.vk.com/wh123", "abc", "55"))
+            _run(api.poll("lp.vk.com/wh123", "abc", "55"))
+
+    def test_poll_keeps_an_explicit_scheme(self, vk):
+        """A server value that already has a scheme is not double-prefixed."""
+        api = self._api(vk)
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"ts": "56", "updates": []}
+        client.get = AsyncMock(return_value=response)
+        api._http_client = client
+
+        _run(api.poll("https://lp.vk.com/wh123", "abc", "55"))
+
+        assert client.get.await_args.args[0] == "https://lp.vk.com/wh123"
 
     def test_send_message_params(self, vk):
         api = self._api(vk)
@@ -633,6 +659,45 @@ class TestPollLoop:
             _run(adapter._run_poll())
 
         assert adapter._api.get_longpoll_server.await_count >= 2
+
+    def test_repeated_failures_escalate_the_backoff(self, vk, adapter_factory):
+        """A poll that keeps failing must back off, not spin.
+
+        The backoff index used to be reset every time the longpoll server
+        was (re)fetched, so a poll that always failed re-armed at the
+        first step forever — a permanent 2-second loop hammering
+        groups.getLongPollServer. The reset belongs on a *successful*
+        poll only.
+        """
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.get_longpoll_server = AsyncMock(
+            return_value={"server": "lp.vk.com/wh1", "key": "k", "ts": "1"}
+        )
+        adapter._api.get_user = AsyncMock(return_value={})
+        adapter._api.get_group = AsyncMock(return_value={})
+
+        async def _poll(*args, **kwargs):
+            raise vk.VkApiError("Long Poll request failed", method="longpoll")
+
+        adapter._api.poll = _poll
+
+        sleeps = []
+
+        async def _fake_sleep(delay):
+            sleeps.append(delay)
+            if len(sleeps) >= 4:
+                adapter._running = False
+
+        adapter._running = True
+        with patch.object(vk.asyncio, "sleep", _fake_sleep):
+            _run(adapter._run_poll())
+
+        # The delays must strictly grow (capped), never repeat the first
+        # step forever.
+        assert len(sleeps) >= 3
+        assert sleeps[0] < sleeps[1] < sleeps[2]
+        assert max(sleeps) <= vk.RECONNECT_BACKOFF[-1]
 
 
 # ---------------------------------------------------------------------------
