@@ -34,12 +34,21 @@ jobs:
         run: |
           echo "🔍 Scanning for common secret patterns..."
 
-          # Patterns that indicate secrets
+          # Patterns that indicate secrets.
+          #
+          # Each pattern requires a realistic key body, not just the
+          # vendor prefix. A bare prefix like "sk-ant-" matches any
+          # documentation placeholder of the form api_key: "sk-ant-...",
+          # which is how this job used to fail on
+          # src/screens/docs/docs-screen.tsx — a false positive, not a
+          # leaked key. A real Anthropic key is "sk-ant-" plus ~95
+          # characters of [A-Za-z0-9_-]; a GitHub fine-grained PAT is
+          # "github_pat_" plus ~82 characters.
           PATTERNS=(
             "sk-[a-zA-Z0-9]{20,}"
-            "sk-ant-"
+            "sk-ant-[a-zA-Z0-9_-]{20,}"
             "ghp_[a-zA-Z0-9]{36}"
-            "github_pat_"
+            "github_pat_[a-zA-Z0-9_]{20,}"
             "gho_[a-zA-Z0-9]{36}"
             "PRIVATE KEY"
             "-----BEGIN RSA"
