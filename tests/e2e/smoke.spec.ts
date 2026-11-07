@@ -12,8 +12,13 @@ test.describe('Hermes Studio smoke tests', () => {
 
   test('/api/auth-check returns a JSON response', async ({ request }) => {
     const res = await request.get('/api/auth-check')
-    // Should always return JSON (may be 200 or 401 depending on auth config)
-    expect([200, 401, 403]).toContain(res.status())
+    // Should always return JSON.
+    //   200    — agent reachable
+    //   401/403 — password protection is on
+    //   503    — agent unreachable. CI runs no Hermes agent, so the
+    //            handler's deliberate 503 is the expected status there —
+    //            same contract as /api/ping below.
+    expect([200, 401, 403, 503]).toContain(res.status())
     const ct = res.headers()['content-type'] ?? ''
     expect(ct).toContain('application/json')
   })
