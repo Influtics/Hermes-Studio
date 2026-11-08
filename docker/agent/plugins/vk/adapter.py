@@ -158,6 +158,15 @@ class VKAdapter(BasePlatformAdapter):
         self._poll_wait: int = _parse_wait(
             extra.get("longpoll_wait") or os.getenv("VK_LONGPOLL_WAIT")
         )
+        # How the Long Poll is reached: "direct", "proxy", or "auto".
+        # "auto" starts direct and falls back to the proxy the first time
+        # a direct poll fails — the proxy is the egress the rest of the
+        # VK traffic uses, so it is the reliable path.
+        self._longpoll_mode: str = str(
+            extra.get("longpoll_mode") or os.getenv("VK_LONGPOLL_MODE", "auto")
+        ).strip().lower()
+        if self._longpoll_mode not in ("direct", "proxy", "auto"):
+            self._longpoll_mode = "auto"
 
         self._api: Optional[VkApi] = None
         self._poll_task: Optional[asyncio.Task] = None
@@ -200,8 +209,8 @@ class VKAdapter(BasePlatformAdapter):
             self._poll_task = asyncio.create_task(self._run_poll())
             self._mark_connected()
             logger.info(
-                "[%s] Connected — polling community %s via %s",
-                self.name, self._group_id, self._api_mode,
+                "[%s] Connected — polling community %s via %s (longpoll: %s)",
+                self.name, self._group_id, self._api_mode, self._longpoll_mode,
             )
             return True
         except Exception as e:
@@ -250,6 +259,7 @@ class VKAdapter(BasePlatformAdapter):
             try:
                 if server_info is None:
                     server_info = await self._api.get_longpoll_server()
+                    await self._ensure_message_events()
                     logger.info("[%s] Long Poll server acquired", self.name)
                     # NOTE: no backoff reset here. Resetting on every
                     # server fetch meant a poll that always failed re-armed
@@ -257,11 +267,10 @@ class VKAdapter(BasePlatformAdapter):
                     # 2-second loop hammering groups.getLongPollServer.
                     # The reset belongs on a *successful poll*, below.
 
-                payload = await self._api.poll(
+                payload = await self._poll_once(
                     server_info["server"],
                     server_info["key"],
                     server_info["ts"],
-                    wait=self._poll_wait,
                 )
 
                 ts = payload.get("ts")
@@ -310,7 +319,7 @@ class VKAdapter(BasePlatformAdapter):
                     # key may have rotated. Refetch the server once, then
                     # fall back to backoff.
                     server_info = None
-                logger.warning("[%s] Poll error: %s", self.name, e)
+                logger.warning("[%s] Poll error (%s mode): %s", self.name, self._longpoll_mode, e)
             except Exception as e:  # pragma: no cover — defensive
                 if not self._running:
                     return
@@ -322,6 +331,66 @@ class VKAdapter(BasePlatformAdapter):
             delay = RECONNECT_BACKOFF[min(backoff_idx, len(RECONNECT_BACKOFF) - 1)]
             await asyncio.sleep(delay)
             backoff_idx += 1
+
+    async def _poll_once(self, server: str, key: str, ts: str) -> Dict[str, Any]:
+        """Run one Long Poll request, over the proxy if that is the mode.
+
+        In "auto" mode the first direct failure switches the adapter to
+        the proxy for the rest of the session: the proxy is the egress
+        every other VK call in this stack uses, and the direct path to
+        VK's Long Poll CDN is not reachable from every host the agent
+        runs on.
+        """
+        if self._longpoll_mode == "proxy":
+            return await self._api.poll_via_proxy(server, key, ts, wait=self._poll_wait)
+
+        try:
+            return await self._api.poll(server, key, ts, wait=self._poll_wait)
+        except VkApiError as e:
+            if self._longpoll_mode != "auto" or e.is_fatal or e.method != "longpoll":
+                raise
+            logger.warning(
+                "[%s] Direct Long Poll failed (%s) — switching to the proxy",
+                self.name, e,
+            )
+            self._longpoll_mode = "proxy"
+            return await self._api.poll_via_proxy(server, key, ts, wait=self._poll_wait)
+
+    async def _ensure_message_events(self) -> None:
+        """Check that VK is actually configured to deliver new messages.
+
+        Enabling Long Poll in the community's admin UI is only half the
+        job: the *events* the community wants delivered live in a separate
+        set of flags, and they are all off until
+        ``groups.setLongPollSettings`` turns them on. A Long Poll with no
+        event flags acquires a server, holds the connection open, and
+        delivers nothing at all — indistinguishable from a quiet chat.
+
+        This only *reads* the flags. Changing a community's persistent
+        settings is not something an adapter should do behind the
+        operator's back, so a disabled flag is reported at WARNING level
+        (visible in the agent log) with the exact place to fix it.
+        """
+        try:
+            settings = await self._api.get_longpoll_settings()
+        except Exception as e:
+            # Not fatal — the poll may still work if the flags are already
+            # on and it was this call that failed.
+            logger.warning("[%s] Could not read Long Poll settings: %s", self.name, e)
+            return
+
+        events = settings.get("events") or {}
+        message_new = events.get("message_new") or {}
+        if int(message_new.get("enabled") or 0) == 1:
+            logger.info("[%s] Long Poll message_new already enabled", self.name)
+            return
+
+        logger.warning(
+            "[%s] Long Poll message_new is DISABLED — VK would deliver no "
+            "messages. Enable it in the community's VK admin: "
+            "Управление → Сообщения → Long Poll API → tick 'Сообщения' → save.",
+            self.name,
+        )
 
     async def _handle_update(self, update: Dict[str, Any]) -> None:
         """Dispatch a single Long Poll update."""

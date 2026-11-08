@@ -256,6 +256,22 @@ class VkApi:
             )
         return {"server": str(server), "key": str(key), "ts": str(ts) if ts is not None else ""}
 
+    async def get_longpoll_settings(self) -> Dict[str, Any]:
+        """Read the community's Long Poll event flags.
+
+        Returns the raw settings object: ``{"api_version", "events",
+        "is_enabled"}``, where ``events`` maps an event name to
+        ``{"in", "out", "enabled"}``.
+
+        This is a read. Enabling an event flag would mean calling
+        ``groups.setLongPollSettings``, which changes a persistent setting
+        on the community — not something this client does on its own.
+        """
+        response = await self.api_call(
+            "groups.getLongPollSettings", {"group_id": self.group_id}
+        )
+        return response if isinstance(response, dict) else {}
+
     async def poll(
         self, server: str, key: str, ts: str, *, wait: int = LONGPOLL_DEFAULT_WAIT
     ) -> Dict[str, Any]:
@@ -317,6 +333,58 @@ class VkApi:
         if not isinstance(payload, dict):
             raise VkApiError("Long Poll returned an unexpected payload", method="longpoll")
         return payload
+
+    async def poll_via_proxy(
+        self, server: str, key: str, ts: str, *, wait: int = LONGPOLL_DEFAULT_WAIT
+    ) -> Dict[str, Any]:
+        """Poll the Long Poll through the proxy instead of directly.
+
+        Every other VK call this stack makes goes through the proxy, so
+        that the egress IP is a single static one. The Long Poll was the
+        odd one out — it went straight to VK's Long Poll CDN from whatever
+        host the agent runs on, and from there it times out before VK
+        answers. Relaying it through the proxy puts it on the same footing
+        as the rest of the VK traffic.
+
+        The Long Poll request carries no access token — only the
+        longpoll key — so relaying it does not expose the community
+        token.
+        """
+        wait = max(LONGPOLL_MIN_WAIT, min(LONGPOLL_MAX_WAIT, int(wait)))
+        url = f"{self.proxy_url}/vk/longpoll"
+        body = {"server": server, "key": key, "ts": ts, "wait": wait}
+
+        try:
+            response = await self._client().post(
+                url,
+                json=body,
+                headers=self._proxy_headers(),
+                # The proxy holds the request open for `wait` seconds, so
+                # the read timeout has to clear that plus the proxy's own
+                # overhead.
+                timeout=httpx.Timeout(self.timeout, read=wait + 30.0),
+            )
+        except httpx.TimeoutException as e:
+            raise VkApiError(f"Long Poll via proxy timed out: {e}", method="longpoll") from e
+        except httpx.HTTPError as e:
+            raise VkApiError(f"Long Poll via proxy failed: {e}", method="longpoll") from e
+
+        try:
+            payload = response.json()
+        except ValueError as e:
+            raise VkApiError("Long Poll proxy returned non-JSON", method="longpoll") from e
+
+        if not isinstance(payload, dict):
+            raise VkApiError("Long Poll proxy returned an unexpected payload", method="longpoll")
+        if not payload.get("success"):
+            raise VkApiError(
+                f"Long Poll proxy error: {payload.get('error') or 'unknown error'}",
+                method="longpoll",
+            )
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise VkApiError("Long Poll proxy returned no payload", method="longpoll")
+        return data
 
     # -- Messages -----------------------------------------------------------
 
