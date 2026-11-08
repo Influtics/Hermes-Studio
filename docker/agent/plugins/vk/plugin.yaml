@@ -61,3 +61,7 @@ optional_env:
     description: "Long Poll wait in seconds (10-90, default 25)"
     prompt: "Long Poll wait seconds"
     password: false
+  - name: VK_LONGPOLL_MODE
+    description: "How the Long Poll is reached: 'auto' (default — direct, falling back to the proxy on failure), 'proxy', or 'direct'"
+    prompt: "Long Poll mode (auto/proxy/direct)"
+    password: false
