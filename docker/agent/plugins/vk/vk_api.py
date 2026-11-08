@@ -256,6 +256,22 @@ class VkApi:
             )
         return {"server": str(server), "key": str(key), "ts": str(ts) if ts is not None else ""}
 
+    async def get_longpoll_settings(self) -> Dict[str, Any]:
+        """Read the community's Long Poll event flags.
+
+        Returns the raw settings object: ``{"api_version", "events",
+        "is_enabled"}``, where ``events`` maps an event name to
+        ``{"in", "out", "enabled"}``.
+
+        This is a read. Enabling an event flag would mean calling
+        ``groups.setLongPollSettings``, which changes a persistent setting
+        on the community — not something this client does on its own.
+        """
+        response = await self.api_call(
+            "groups.getLongPollSettings", {"group_id": self.group_id}
+        )
+        return response if isinstance(response, dict) else {}
+
     async def poll(
         self, server: str, key: str, ts: str, *, wait: int = LONGPOLL_DEFAULT_WAIT
     ) -> Dict[str, Any]:

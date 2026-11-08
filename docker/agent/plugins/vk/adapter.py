@@ -250,6 +250,7 @@ class VKAdapter(BasePlatformAdapter):
             try:
                 if server_info is None:
                     server_info = await self._api.get_longpoll_server()
+                    await self._ensure_message_events()
                     logger.info("[%s] Long Poll server acquired", self.name)
                     # NOTE: no backoff reset here. Resetting on every
                     # server fetch meant a poll that always failed re-armed
@@ -322,6 +323,42 @@ class VKAdapter(BasePlatformAdapter):
             delay = RECONNECT_BACKOFF[min(backoff_idx, len(RECONNECT_BACKOFF) - 1)]
             await asyncio.sleep(delay)
             backoff_idx += 1
+
+    async def _ensure_message_events(self) -> None:
+        """Check that VK is actually configured to deliver new messages.
+
+        Enabling Long Poll in the community's admin UI is only half the
+        job: the *events* the community wants delivered live in a separate
+        set of flags, and they are all off until
+        ``groups.setLongPollSettings`` turns them on. A Long Poll with no
+        event flags acquires a server, holds the connection open, and
+        delivers nothing at all — indistinguishable from a quiet chat.
+
+        This only *reads* the flags. Changing a community's persistent
+        settings is not something an adapter should do behind the
+        operator's back, so a disabled flag is reported at WARNING level
+        (visible in the agent log) with the exact place to fix it.
+        """
+        try:
+            settings = await self._api.get_longpoll_settings()
+        except Exception as e:
+            # Not fatal — the poll may still work if the flags are already
+            # on and it was this call that failed.
+            logger.warning("[%s] Could not read Long Poll settings: %s", self.name, e)
+            return
+
+        events = settings.get("events") or {}
+        message_new = events.get("message_new") or {}
+        if int(message_new.get("enabled") or 0) == 1:
+            logger.info("[%s] Long Poll message_new already enabled", self.name)
+            return
+
+        logger.warning(
+            "[%s] Long Poll message_new is DISABLED — VK would deliver no "
+            "messages. Enable it in the community's VK admin: "
+            "Управление → Сообщения → Long Poll API → tick 'Сообщения' → save.",
+            self.name,
+        )
 
     async def _handle_update(self, update: Dict[str, Any]) -> None:
         """Dispatch a single Long Poll update."""

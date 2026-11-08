@@ -178,6 +178,17 @@ class TestSeedRoundTrip:
         assert vk._parse_wait("") == vk.LONGPOLL_DEFAULT_WAIT
         assert vk._parse_wait("not-a-number") == vk.LONGPOLL_DEFAULT_WAIT
 
+    def test_longpoll_settings_round_trip(self, vk, adapter_factory):
+        """Reading the Long Poll event flags uses the right VK method and
+        parameter names — and nothing writes the community's settings."""
+        api = vk.VkApi(token="tok", group_id="243045540", api_mode="proxy")
+        api.api_call = AsyncMock(return_value={"events": {"message_new": {}}})
+
+        _run(api.get_longpoll_settings())
+        method, params = api.api_call.await_args.args
+        assert method == "groups.getLongPollSettings"
+        assert params == {"group_id": "243045540"}
+
 
 # ---------------------------------------------------------------------------
 # 3. VkApi — the wire format
@@ -698,6 +709,60 @@ class TestPollLoop:
         assert len(sleeps) >= 3
         assert sleeps[0] < sleeps[1] < sleeps[2]
         assert max(sleeps) <= vk.RECONNECT_BACKOFF[-1]
+
+    def test_message_events_are_checked_when_the_server_is_acquired(self, vk, adapter_factory):
+        """The Long Poll event flags are read on every server acquisition.
+
+        A community whose `message_new` flag is off delivers no messages
+        at all, while the poll itself looks perfectly healthy.
+        """
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.get_longpoll_server = AsyncMock(
+            return_value={"server": "lp.vk.com/wh1", "key": "k", "ts": "1"}
+        )
+        adapter._api.get_longpoll_settings = AsyncMock(
+            return_value={
+                "api_version": "2",
+                "is_enabled": True,
+                "events": {"message_new": {"in": 1, "out": 1, "enabled": 1}},
+            }
+        )
+        adapter._api.set_longpoll_settings = AsyncMock(return_value={})
+        adapter._api.get_user = AsyncMock(return_value={})
+        adapter._api.get_group = AsyncMock(return_value={})
+
+        async def _poll(*args, **kwargs):
+            adapter._running = False
+            return {"ts": "2", "updates": []}
+
+        adapter._api.poll = _poll
+
+        adapter._running = True
+        _run(adapter._run_poll())
+
+        adapter._api.get_longpoll_settings.assert_awaited_once()
+        # Already enabled — nothing to change.
+        adapter._api.set_longpoll_settings.assert_not_awaited()
+
+    def test_disabled_message_events_are_reported(self, vk, adapter_factory):
+        """With the flag off the adapter reports it — and never writes the
+        community's settings itself."""
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.get_longpoll_settings = AsyncMock(
+            return_value={
+                "api_version": "2",
+                "is_enabled": True,
+                "events": {"message_new": {"in": 0, "out": 0, "enabled": 0}},
+            }
+        )
+        adapter._api.set_longpoll_settings = AsyncMock(return_value={})
+
+        _run(adapter._ensure_message_events())
+
+        # Reported only — the community's settings are left untouched.
+        adapter._api.set_longpoll_settings.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
