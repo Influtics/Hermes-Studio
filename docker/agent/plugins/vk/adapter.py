@@ -439,6 +439,16 @@ class VKAdapter(BasePlatformAdapter):
         if not isinstance(message, dict):
             return
 
+        # lp_version=2 nests the message under `object.message`:
+        #   {"type": 4, "object": {"message": {...}, "client_info": "..."}}
+        # lp_version=1 puts the fields straight on `object`. The plugin
+        # asks for version 2, so the nested shape is the one that arrives
+        # — and reading `object["from_id"]` there yields None, which drops
+        # every message silently: no error, no reply, just silence.
+        nested = message.get("message")
+        if isinstance(nested, dict):
+            message = nested
+
         await self._on_message(message)
 
     async def _on_message(self, message: Dict[str, Any]) -> None:
