@@ -784,10 +784,6 @@ class VKAdapter(BasePlatformAdapter):
 
     async def get_chat_info(self, chat_id: str) -> Dict[str, Any]:
         """Return basic info about a VK peer."""
-        try:
-            peer_id = int(chat_id)
-        except (TypeError, ValueError):
-            peer_id = 0
         return {
             "name": f"VK {chat_id}",
             "type": self._chat_type(chat_id),
