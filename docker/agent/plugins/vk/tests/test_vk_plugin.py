@@ -399,6 +399,51 @@ class TestVkApi:
         assert "tok" not in str(call_kwargs)
         assert "tok" not in client.get.await_args.args[0]
 
+    def test_poll_via_proxy_shape(self, vk):
+        """The proxied poll posts the longpoll params to the proxy.
+
+        The Long Poll request carries no access token — only the
+        longpoll key — so relaying it does not expose the community
+        token.
+        """
+        api = self._api(vk, proxy_url="https://proxy.test", proxy_api_key="pkey")
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"success": True, "data": {"ts": "56", "updates": []}}
+        client.post = AsyncMock(return_value=response)
+        api._http_client = client
+
+        payload = _run(api.poll_via_proxy("lp.vk.com/wh123", "abc", "55", wait=25))
+
+        assert payload["ts"] == "56"
+        args, kwargs = client.post.await_args
+        assert args[0] == "https://proxy.test/vk/longpoll"
+        assert kwargs["json"] == {
+            "server": "lp.vk.com/wh123",
+            "key": "abc",
+            "ts": "55",
+            "wait": 25,
+        }
+        assert kwargs["headers"]["Authorization"] == "Bearer pkey"
+        # The community token must not travel with the poll.
+        assert "tok" not in str(kwargs["json"])
+        assert "tok" not in str(kwargs["headers"])
+
+    def test_poll_via_proxy_reports_proxy_errors(self, vk):
+        api = self._api(vk, proxy_url="https://proxy.test", proxy_api_key="pkey")
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 502
+        response.json.return_value = {"success": False, "error": "socket hang up"}
+        client.post = AsyncMock(return_value=response)
+        api._http_client = client
+
+        with pytest.raises(vk.VkApiError) as excinfo:
+            _run(api.poll_via_proxy("lp.vk.com/wh123", "abc", "55"))
+
+        assert "socket hang up" in str(excinfo.value)
+
     def test_poll_401_raises(self, vk):
         api = self._api(vk)
         client = MagicMock()
@@ -709,6 +754,72 @@ class TestPollLoop:
         assert len(sleeps) >= 3
         assert sleeps[0] < sleeps[1] < sleeps[2]
         assert max(sleeps) <= vk.RECONNECT_BACKOFF[-1]
+
+    def test_auto_mode_falls_back_to_the_proxy(self, vk, adapter_factory):
+        """A direct poll that fails switches the adapter to the proxy.
+
+        The proxy is the egress every other VK call in this stack uses;
+        the direct path to VK's Long Poll CDN is not reachable from
+        every host the agent runs on.
+        """
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.get_longpoll_server = AsyncMock(
+            return_value={"server": "lp.vk.com/wh1", "key": "k", "ts": "1"}
+        )
+        adapter._api.get_longpoll_settings = AsyncMock(
+            return_value={"events": {"message_new": {"enabled": 1}}}
+        )
+        adapter._api.get_user = AsyncMock(return_value={})
+        adapter._api.get_group = AsyncMock(return_value={})
+
+        direct_calls = {"n": 0}
+
+        async def _poll(*args, **kwargs):
+            direct_calls["n"] += 1
+            raise vk.VkApiError("Long Poll timed out", method="longpoll")
+
+        async def _poll_via_proxy(*args, **kwargs):
+            adapter._running = False
+            return {"ts": "2", "updates": []}
+
+        adapter._api.poll = _poll
+        adapter._api.poll_via_proxy = _poll_via_proxy
+
+        adapter._running = True
+        _run(adapter._run_poll())
+
+        assert direct_calls["n"] == 1
+        # Stuck on the proxy after the first direct failure.
+        assert adapter._longpoll_mode == "proxy"
+
+    def test_proxy_mode_never_polls_directly(self, vk, adapter_factory, monkeypatch):
+        """VK_LONGPOLL_MODE=proxy skips the direct path entirely."""
+        monkeypatch.setenv("VK_LONGPOLL_MODE", "proxy")
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.get_longpoll_server = AsyncMock(
+            return_value={"server": "lp.vk.com/wh1", "key": "k", "ts": "1"}
+        )
+        adapter._api.get_longpoll_settings = AsyncMock(
+            return_value={"events": {"message_new": {"enabled": 1}}}
+        )
+        adapter._api.get_user = AsyncMock(return_value={})
+        adapter._api.get_group = AsyncMock(return_value={})
+
+        direct = MagicMock()
+
+        async def _poll_via_proxy(*args, **kwargs):
+            adapter._running = False
+            return {"ts": "2", "updates": []}
+
+        adapter._api.poll = direct
+        adapter._api.poll_via_proxy = _poll_via_proxy
+
+        adapter._running = True
+        _run(adapter._run_poll())
+
+        direct.assert_not_called()
 
     def test_message_events_are_checked_when_the_server_is_acquired(self, vk, adapter_factory):
         """The Long Poll event flags are read on every server acquisition.
