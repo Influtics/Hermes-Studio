@@ -81,8 +81,14 @@ RECONNECT_BACKOFF = [2, 5, 10, 30, 60]
 # ``2000000001 + user_id``.
 PEER_ID_USER_OFFSET = 2000000001
 
-# Long Poll update type for a new message (lp_version 2).
+# Long Poll update type for a new message.
+#
+# lp_version=1 sends the type as an integer (4); lp_version=2 — which the
+# plugin asks for — sends it as a STRING ("message_new"). Comparing
+# against the integer alone drops every update in version 2, silently:
+# the poll succeeds, the events arrive, and nothing is ever handled.
 MESSAGE_NEW_UPDATE = 4
+MESSAGE_NEW_UPDATE_V2 = "message_new"
 
 
 def _event_flag(events: Any, name: str) -> Optional[bool]:
@@ -432,7 +438,7 @@ class VKAdapter(BasePlatformAdapter):
         """Dispatch a single Long Poll update."""
         if not isinstance(update, dict):
             return
-        if update.get("type") != MESSAGE_NEW_UPDATE:
+        if update.get("type") not in (MESSAGE_NEW_UPDATE, MESSAGE_NEW_UPDATE_V2):
             return
 
         message = update.get("object")
@@ -479,9 +485,14 @@ class VKAdapter(BasePlatformAdapter):
 
         user_id = str(from_id)
         chat_id = str(peer_id)
-        # A personal dialog with the community is addressed as
-        # 2000000001 + user_id; anything else is a group conversation.
-        chat_type = "dm" if int(peer_id) == PEER_ID_USER_OFFSET + int(from_id) else "group"
+        # A personal dialog with the community is addressed two ways: the
+        # lp_version=2 event carries the bare user id as peer_id, while
+        # other VK surfaces use 2000000001 + user_id. Anything else is a
+        # group conversation.
+        peer = int(peer_id)
+        sender = int(from_id)
+        is_dm = peer == sender or peer == PEER_ID_USER_OFFSET + sender
+        chat_type = "dm" if is_dm else "group"
 
         source = self.build_source(
             chat_id=chat_id,

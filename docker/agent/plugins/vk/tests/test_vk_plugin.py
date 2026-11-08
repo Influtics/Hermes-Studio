@@ -560,6 +560,64 @@ class TestInbound:
         assert event.source.chat_id == "2191655493"
         assert event.source.chat_type == "dm"
 
+    def test_real_lp_version_2_event_is_handled(self, vk, adapter_factory):
+        """The exact event VK delivered, captured from a live poll.
+
+        Two things differ from the lp_version=1 shape and both matter:
+        `type` is the STRING "message_new" (not the integer 4), and
+        `peer_id` is the bare user id (not 2000000001 + user_id).
+        Comparing `type` against the integer alone drops every update.
+        """
+        adapter = adapter_factory({"token": "tok", "group_id": "243045540"})
+        adapter._api = _mock_api(user={"first_name": "Ivan"}, group={"name": "Hermes"})
+
+        update = {
+            "group_id": 243045540,
+            "type": "message_new",
+            "event_id": "00155a1a6bf7c06bac69cd1a7646944c0bbc4fad",
+            "v": "5.199",
+            "object": {
+                "client_info": {"button_actions": ["text"], "lang_id": 0},
+                "message": {
+                    "date": 1794156382,
+                    "from_id": 191655492,
+                    "id": 23,
+                    "out": 0,
+                    "fwd_messages": [],
+                    "attachments": [],
+                    "conversation_message_id": 23,
+                    "text": "which model are you",
+                    "peer_id": 191655492,
+                    "random_id": 0,
+                },
+            },
+        }
+
+        _run(adapter._handle_update(update))
+
+        assert len(adapter.handled_events) == 1
+        event = adapter.handled_events[0]
+        assert event.text == "which model are you"
+        assert event.source.user_id == "191655492"
+        # The reply goes back to the peer VK named.
+        assert event.source.chat_id == "191655492"
+        assert event.source.chat_type == "dm"
+
+    def test_typing_state_events_are_ignored(self, vk, adapter_factory):
+        """lp_version=2 sends typing events as their own type — ignore them."""
+        adapter = adapter_factory({"token": "tok", "group_id": "243045540"})
+        adapter._api = _mock_api()
+
+        update = {
+            "group_id": 243045540,
+            "type": "message_typing_state",
+            "object": {"from_id": 191655492, "to_id": -243045540, "state": "typing"},
+        }
+
+        _run(adapter._handle_update(update))
+
+        assert adapter.handled_events == []
+
     def test_lp_version_1_update_still_works(self, vk, adapter_factory):
         """The lp_version=1 shape — fields straight on `object` — still works."""
         adapter = adapter_factory({"token": "tok", "group_id": "243045540"})
@@ -577,6 +635,7 @@ class TestInbound:
         adapter._api = _mock_api()
 
         _run(adapter._handle_update({"type": 5, "object": {"message": self._message()}}))
+        _run(adapter._handle_update({"type": "message_event", "object": {"message": self._message()}}))
         _run(adapter._handle_update({"type": 4, "object": "not-a-dict"}))
         _run(adapter._handle_update("not-a-dict"))
 
