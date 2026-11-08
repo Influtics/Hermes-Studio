@@ -531,6 +531,57 @@ class TestInbound:
         assert event.source.user_name == "Ivan"
         assert event.source.chat_name == "Hermes"
 
+    def test_lp_version_2_update_is_unwrapped(self, vk, adapter_factory):
+        """A lp_version=2 update nests the message under object.message.
+
+        The plugin asks VK for lp_version=2, so this is the shape that
+        actually arrives. Reading the fields off `object` directly (the
+        lp_version=1 shape) yields None for from_id and drops every
+        message silently — no error, no reply.
+        """
+        adapter = adapter_factory({"token": "tok", "group_id": "243045540"})
+        adapter._api = _mock_api(user={"first_name": "Ivan"}, group={"name": "Hermes"})
+
+        update = {
+            "type": 4,
+            "object": {
+                "message": self._message(),
+                "client_info": '{"button_actions": []}',
+            },
+            "event": {"type": "message_new"},
+        }
+
+        _run(adapter._handle_update(update))
+
+        assert len(adapter.handled_events) == 1
+        event = adapter.handled_events[0]
+        assert event.text == "hello hermes"
+        assert event.source.user_id == "191655492"
+        assert event.source.chat_id == "2191655493"
+        assert event.source.chat_type == "dm"
+
+    def test_lp_version_1_update_still_works(self, vk, adapter_factory):
+        """The lp_version=1 shape — fields straight on `object` — still works."""
+        adapter = adapter_factory({"token": "tok", "group_id": "243045540"})
+        adapter._api = _mock_api()
+
+        update = {"type": 4, "object": self._message()}
+
+        _run(adapter._handle_update(update))
+
+        assert len(adapter.handled_events) == 1
+        assert adapter.handled_events[0].text == "hello hermes"
+
+    def test_other_update_types_are_ignored(self, vk, adapter_factory):
+        adapter = adapter_factory({"token": "tok", "group_id": "243045540"})
+        adapter._api = _mock_api()
+
+        _run(adapter._handle_update({"type": 5, "object": {"message": self._message()}}))
+        _run(adapter._handle_update({"type": 4, "object": "not-a-dict"}))
+        _run(adapter._handle_update("not-a-dict"))
+
+        assert adapter.handled_events == []
+
     def test_chat_name_falls_back_to_id(self, vk, adapter_factory):
         """A failed groups.getById must not block the message."""
         adapter = adapter_factory({"token": "tok", "group_id": "243045540"})
