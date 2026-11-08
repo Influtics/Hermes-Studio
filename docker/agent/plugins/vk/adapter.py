@@ -85,6 +85,33 @@ PEER_ID_USER_OFFSET = 2000000001
 MESSAGE_NEW_UPDATE = 4
 
 
+def _event_flag(events: Any, name: str) -> Optional[bool]:
+    """Read one Long Poll event flag out of VK's ``groups.getLongPollSettings``.
+
+    VK returns the flags in more than one shape: a flat map of event name
+    to ``1``/``0``, and a nested ``{"in": .., "out": .., "enabled": ..}``
+    object. Both are accepted.
+
+    This matters more than it looks: reading the wrong shape raises
+    deep inside the poll loop, where it surfaces as "Unexpected poll
+    error" and reads like a network fault rather than a parsing mistake.
+
+    Returns ``True``/``False`` for a known flag, ``None`` when the flag
+    cannot be found or understood.
+    """
+    if not isinstance(events, dict):
+        return None
+    raw = events.get(name)
+    if isinstance(raw, dict):
+        raw = raw.get("enabled", raw.get("in"))
+    if raw is None:
+        return None
+    try:
+        return bool(int(raw))
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_wait(value: Any) -> int:
     """Parse ``VK_LONGPOLL_WAIT`` into a sane Long Poll wait in seconds.
 
@@ -379,10 +406,19 @@ class VKAdapter(BasePlatformAdapter):
             logger.warning("[%s] Could not read Long Poll settings: %s", self.name, e)
             return
 
-        events = settings.get("events") or {}
-        message_new = events.get("message_new") or {}
-        if int(message_new.get("enabled") or 0) == 1:
+        events = settings.get("events") if isinstance(settings, dict) else None
+        enabled = _event_flag(events, "message_new")
+        if enabled is True:
             logger.info("[%s] Long Poll message_new already enabled", self.name)
+            return
+        if enabled is None:
+            logger.warning(
+                "[%s] Could not read the message_new flag from VK's Long Poll "
+                "settings (got %r) — cannot tell whether messages are "
+                "delivered. Enable 'Сообщения' under Управление → Сообщения → "
+                "Long Poll API to be sure.",
+                self.name, events,
+            )
             return
 
         logger.warning(

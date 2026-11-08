@@ -821,6 +821,44 @@ class TestPollLoop:
 
         direct.assert_not_called()
 
+    def test_event_flag_reads_both_vk_shapes(self, vk):
+        """VK returns the Long Poll flags in two shapes.
+
+        A flat map of event name to 1/0, and a nested
+        {"in": .., "out": .., "enabled": ..} object. Reading the wrong
+        one raised inside the poll loop, where it surfaced as
+        "Unexpected poll error" and looked like a network fault.
+        """
+        assert vk._event_flag({"message_new": 1}, "message_new") is True
+        assert vk._event_flag({"message_new": 0}, "message_new") is False
+        assert vk._event_flag(
+            {"message_new": {"in": 1, "out": 1, "enabled": 1}}, "message_new"
+        ) is True
+        assert vk._event_flag(
+            {"message_new": {"in": 1, "out": 1, "enabled": 0}}, "message_new"
+        ) is False
+        # Absent or unintelligible — not a "disabled" verdict.
+        assert vk._event_flag({}, "message_new") is None
+        assert vk._event_flag({"message_new": "yes-please"}, "message_new") is None
+        assert vk._event_flag(None, "message_new") is None
+        assert vk._event_flag("not-a-dict", "message_new") is None
+
+    def test_flat_event_shape_does_not_break_the_poll(self, vk, adapter_factory):
+        """The flat shape must not raise inside the poll loop."""
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.get_longpoll_settings = AsyncMock(
+            return_value={
+                "api_version": "2",
+                "is_enabled": True,
+                "events": {"message_new": 1, "message_reply": 1},
+            }
+        )
+        adapter._api.set_longpoll_settings = AsyncMock(return_value={})
+
+        _run(adapter._ensure_message_events())  # must not raise
+        adapter._api.set_longpoll_settings.assert_not_awaited()
+
     def test_message_events_are_checked_when_the_server_is_acquired(self, vk, adapter_factory):
         """The Long Poll event flags are read on every server acquisition.
 
