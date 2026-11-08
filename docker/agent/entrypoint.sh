@@ -100,13 +100,17 @@
 #    This key is read as `model.context_length` (run.py) and takes precedence
 #    over the metadata table.
 #
-# 5. If MINIMAX_API_KEY is set, unset ANTHROPIC_API_KEY + ANTHROPIC_TOKEN.
+# 5. If VK_GROUP_TOKEN is set, render the `display:` block that enables
+#    token streaming for the VK platform only. See the step-5 note in the
+#    body for why the knob is per-platform.
+#
+# 6. If MINIMAX_API_KEY is set, unset ANTHROPIC_API_KEY + ANTHROPIC_TOKEN.
 #    The agent's auxiliary client can fall back to Anthropic after a
 #    primary-provider error and send MiniMax's key to api.anthropic.com,
 #    which rejects it with "Invalid API Key". studio surfaces that as:
 #    Skills: HTTP 500. Stripping the conflicting creds is the fix.
 #
-# 6. exec the gateway (hermes gateway run).
+# 7. exec the gateway (hermes gateway run).
 
 set -e
 
@@ -127,7 +131,7 @@ mkdir -p "$HERMES_HOME"
 #    restating the full env-var list twice was the part of this file most
 #    likely to drift out of sync when a server is added.
 CONFIG_RENDERED=""
-if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ] || [ -n "$POSTHOG_API_KEY" ] || [ -n "$HERMES_MODEL" ]; then
+if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$METABASE_API_KEY" ] || [ -n "$GRAFANA_API_KEY" ] || [ -n "$SENTRY_AUTH_TOKEN" ] || [ -n "$GITHUB_TOKEN" ] || [ -n "$POSTHOG_API_KEY" ] || [ -n "$HERMES_MODEL" ] || [ -n "$VK_GROUP_TOKEN" ]; then
   CONFIG_RENDERED=1
   : > "$HERMES_HOME/config.yaml"
 fi
@@ -248,16 +252,45 @@ if [ -n "$HERMES_MODEL" ]; then
   } >> "$HERMES_HOME/config.yaml"
 fi
 
+# 5. Render the `display:` block for VK. Streaming is how the gateway
+#    shows an answer as the model writes it: the first chunk is sent with
+#    `messages.send` and every later chunk rewrites that same message
+#    with `messages.edit`.
+#
+#    The knob is per-platform on purpose. `display.platforms.<p>.streaming`
+#    is resolved BEFORE the top-level `streaming.enabled` (run.py:
+#    `_plat_streaming`), so setting it for vk enables streaming for VK
+#    alone and leaves Telegram exactly as it was. The top-level
+#    `streaming.enabled` defaults to False, so without this block VK
+#    would never stream.
+#
+#    VK_STREAMING=false turns it off without a code change.
+#
+#    The `display:` key is distinct from `platforms:`, `mcp_servers:` and
+#    `model:`, so appending it here composes into one config.yaml.
+if [ -n "$VK_GROUP_TOKEN" ]; then
+  _vk_streaming="true"
+  case "$(printf '%s' "${VK_STREAMING:-true}" | tr '[:upper:]' '[:lower:]')" in
+    false|0|no|off) _vk_streaming="false" ;;
+  esac
+  {
+    echo "display:"
+    echo "  platforms:"
+    echo "    vk:"
+    echo "      streaming: $_vk_streaming"
+  } >> "$HERMES_HOME/config.yaml"
+fi
+
 # Lock file perms if any env-driven block was written.
 if [ -n "$CONFIG_RENDERED" ]; then
   chmod 600 "$HERMES_HOME/config.yaml"
 fi
 
-# 4. Drop conflicting Anthropic creds when MiniMax is configured.
+# 6. Drop conflicting Anthropic creds when MiniMax is configured.
 if [ -n "$MINIMAX_API_KEY" ]; then
   unset ANTHROPIC_API_KEY
   unset ANTHROPIC_TOKEN
 fi
 
-# 5. Hand off to the gateway.
+# 7. Hand off to the gateway.
 exec "$@"

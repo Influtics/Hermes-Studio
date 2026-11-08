@@ -77,8 +77,10 @@ DEDUP_MAX_SIZE = 1000
 # Backoff between failed Long Poll attempts (seconds).
 RECONNECT_BACKOFF = [2, 5, 10, 30, 60]
 
-# A personal dialog between a user and a community is addressed by
-# ``2000000001 + user_id``.
+# A personal dialog between a user and a community is addressed two ways:
+# the bare user id (191655492), which is what VK reports as ``peer_id`` in
+# a ``lp_version=2`` event and what ``messages.send`` accepts, and the
+# offset form ``2000000001 + user_id``, which VK rejects on send.
 PEER_ID_USER_OFFSET = 2000000001
 
 # Long Poll update type for a new message.
@@ -215,6 +217,18 @@ class VKAdapter(BasePlatformAdapter):
 
         # Community display name, fetched lazily and cached.
         self._group_name: str = ""
+
+        # chat id -> "dm" | "group". VK's peer id cannot be classified by
+        # its magnitude: a personal dialog is reported as the bare user id
+        # (191655492), which is far below the 2000000001 + user_id offset
+        # that group conversations use. The only reliable source is the
+        # incoming event, where peer_id is compared with from_id.
+        self._chat_types: Dict[str, str] = {}
+
+        # Set to False the first time VK rejects a typing indicator, so a
+        # community that does not allow it is not asked again on every
+        # heartbeat tick.
+        self._typing_supported: bool = True
 
     # -- Connection lifecycle -----------------------------------------------
 
@@ -493,6 +507,9 @@ class VKAdapter(BasePlatformAdapter):
         sender = int(from_id)
         is_dm = peer == sender or peer == PEER_ID_USER_OFFSET + sender
         chat_type = "dm" if is_dm else "group"
+        # Remember it: the peer id alone cannot tell a personal dialog
+        # from a group conversation (see ``_chat_type``).
+        self._chat_types[chat_id] = chat_type
 
         source = self.build_source(
             chat_id=chat_id,
@@ -646,8 +663,124 @@ class VKAdapter(BasePlatformAdapter):
         )
 
     async def send_typing(self, chat_id: str, metadata=None) -> None:
-        """VK has no bot typing indicator for community messages."""
+        """Show the community as typing in the user's chat.
+
+        VK's ``messages.setActivity`` is the counterpart of Telegram's
+        ``sendChatAction``: with a community token it makes the community
+        appear as typing in the dialog with that user. The gateway calls
+        this on a ~2 second heartbeat, so a failure here must never
+        interrupt the reply — it is logged and swallowed.
+
+        Only a personal dialog has a user to attach the activity to. In
+        a group conversation the status would belong to nobody in
+        particular, so it is skipped.
+        """
+        if not self._api or not self._typing_supported:
+            return None
+        if self._chat_type(chat_id) != "dm":
+            return None
+
+        try:
+            peer_id = int(chat_id)
+        except (TypeError, ValueError):
+            return None
+
+        try:
+            await self._api.set_activity(peer_id, peer_id, "typing")
+        except VkApiError as e:
+            # VK rejected the activity — a community that may not message
+            # the user, or a community where the indicator is not
+            # available. Not worth retrying on every tick.
+            self._typing_supported = False
+            logger.warning(
+                "[%s] Typing indicator unavailable (%s) — not sending it again",
+                self.name,
+                e,
+            )
+        except Exception as e:
+            # A transport hiccup is not a verdict — keep the indicator on.
+            logger.debug("[%s] Typing indicator failed: %s", self.name, e)
         return None
+
+    async def edit_message(
+        self,
+        chat_id: str,
+        message_id: str,
+        content: str,
+        *,
+        finalize: bool = False,
+    ) -> SendResult:
+        """Rewrite a message the community already sent.
+
+        This is what makes a streamed response possible: the gateway
+        sends the first chunk with ``messages.send`` and then rewrites
+        that same message as the answer grows. VK calls this
+        ``messages.edit``.
+
+        ``finalize`` is a no-op here — VK's edit API has no notion of a
+        message lifecycle, so the last edit is just another edit.
+        """
+        if not self._api:
+            return SendResult(success=False, error="VK client not initialized")
+
+        try:
+            peer_id = int(chat_id)
+            mid = int(message_id)
+        except (TypeError, ValueError):
+            return SendResult(
+                success=False, error=f"Invalid VK peer/message id: {chat_id!r}/{message_id!r}"
+            )
+
+        body = self.format_message(content or "")
+        if len(body) > MAX_MESSAGE_LENGTH:
+            body = body[:MAX_MESSAGE_LENGTH]
+
+        try:
+            response = await self._api.edit_message(peer_id, mid, body)
+        except VkApiError as e:
+            # The gateway's stream consumer recognises a rate limit by
+            # looking for "rate" / "flood" in the error text and then
+            # backs off. VK's own wording for error 6 is "Too many
+            # requests", which matches none of them — so phrase it here.
+            error = str(e)
+            if e.is_rate_limited:
+                error = f"VK rate limit: {error}"
+            logger.warning("[%s] Edit failed: %s", self.name, error)
+            return SendResult(success=False, error=error, retryable=e.is_rate_limited)
+        except Exception as e:
+            logger.error("[%s] Edit error: %s", self.name, e)
+            return SendResult(success=False, error=str(e))
+
+        return SendResult(
+            success=True,
+            message_id=str(message_id),
+            raw_response=response,
+        )
+
+    def _chat_type(self, chat_id: str) -> str:
+        """Whether ``chat_id`` is a personal dialog or a group conversation.
+
+        VK's peer id cannot be classified by its magnitude: a personal
+        dialog is reported as the bare user id (191655492), which is far
+        below the 2000000001 + user_id offset a group conversation uses.
+        Guessing from the number gets it exactly backwards, so the type
+        comes from the incoming event, where ``peer_id`` is compared with
+        ``from_id``. Chats that were never seen in an event fall back to
+        "group", which is the safe answer for a personal dialog (no
+        typing indicator) and the harmless one for a conversation.
+        """
+        known = self._chat_types.get(str(chat_id))
+        if known:
+            return known
+        try:
+            peer_id = int(chat_id)
+        except (TypeError, ValueError):
+            return "group"
+        # The offset form (2000000001 + user_id) is unambiguously a
+        # personal dialog.
+        if peer_id > PEER_ID_USER_OFFSET:
+            return "dm"
+        return "group"
 
     async def get_chat_info(self, chat_id: str) -> Dict[str, Any]:
         """Return basic info about a VK peer."""
@@ -657,7 +790,7 @@ class VKAdapter(BasePlatformAdapter):
             peer_id = 0
         return {
             "name": f"VK {chat_id}",
-            "type": "dm" if peer_id > PEER_ID_USER_OFFSET else "group",
+            "type": self._chat_type(chat_id),
             "chat_id": str(chat_id),
         }
 

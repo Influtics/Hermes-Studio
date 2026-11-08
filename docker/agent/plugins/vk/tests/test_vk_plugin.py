@@ -496,6 +496,57 @@ class TestVkApi:
 
         assert vk_api._random_id() != vk_api._random_id()
 
+    def test_edit_message_params(self, vk):
+        api = self._api(vk)
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"success": True, "data": {"message_id": 77}}
+        client.post = AsyncMock(return_value=response)
+        api._http_client = client
+
+        result = _run(api.edit_message(191655492, 77, "updated"))
+
+        assert result["message_id"] == 77
+        body = client.post.await_args.kwargs["json"]
+        assert body["method"] == "messages.edit"
+        assert body["params"]["peer_id"] == 191655492
+        assert body["params"]["message_id"] == 77
+        assert body["params"]["message"] == "updated"
+
+    def test_set_activity_params(self, vk):
+        api = self._api(vk)
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"success": True, "data": 1}
+        client.post = AsyncMock(return_value=response)
+        api._http_client = client
+
+        _run(api.set_activity(191655492, 191655492, "typing"))
+
+        body = client.post.await_args.kwargs["json"]
+        assert body["method"] == "messages.setActivity"
+        assert body["params"]["peer_id"] == 191655492
+        assert body["params"]["user_id"] == 191655492
+        assert body["params"]["type"] == "typing"
+        # A community token has to name the community it acts as.
+        assert body["params"]["group_id"] == 243045540
+
+    def test_set_activity_omits_group_id_when_unset(self, vk):
+        api = self._api(vk, group_id="")
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"success": True, "data": 1}
+        client.post = AsyncMock(return_value=response)
+        api._http_client = client
+
+        _run(api.set_activity(191655492, 191655492, "typing"))
+
+        body = client.post.await_args.kwargs["json"]
+        assert "group_id" not in body["params"]
+
 
 # ---------------------------------------------------------------------------
 # 4. Inbound message handling
@@ -1091,15 +1142,139 @@ class TestOutbound:
         result = _run(adapter.send("1", "hi"))
         assert result.success is False
 
-    def test_typing_is_a_noop(self, vk, adapter_factory):
+    def test_typing_is_skipped_for_an_unknown_chat(self, vk, adapter_factory):
+        """A chat we have never seen an event for has no user to attach
+        the activity to."""
         adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.set_activity = AsyncMock(return_value={})
+
         assert _run(adapter.send_typing("1")) is None
+        adapter._api.set_activity.assert_not_called()
+
+    def test_typing_sets_the_activity_for_a_dm(self, vk, adapter_factory):
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.set_activity = AsyncMock(return_value={})
+        # A personal dialog: the peer id is the bare user id.
+        adapter._chat_types["191655492"] = "dm"
+
+        assert _run(adapter.send_typing("191655492")) is None
+        adapter._api.set_activity.assert_awaited_once_with(
+            191655492, 191655492, "typing"
+        )
+
+    def test_typing_failure_disables_the_indicator(self, vk, adapter_factory):
+        """VK rejected it — asking again on every heartbeat tick would be
+        pointless, so the indicator is switched off."""
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.set_activity = AsyncMock(
+            side_effect=vk.VkApiError("peer access denied", error_code=15)
+        )
+        adapter._chat_types["191655492"] = "dm"
+
+        assert _run(adapter.send_typing("191655492")) is None
+        assert _run(adapter.send_typing("191655492")) is None
+        assert adapter._api.set_activity.await_count == 1
+
+    def test_typing_transport_failure_keeps_the_indicator(self, vk, adapter_factory):
+        """A timeout is not a verdict — the next tick tries again."""
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.set_activity = AsyncMock(side_effect=TimeoutError("boom"))
+        adapter._chat_types["191655492"] = "dm"
+
+        assert _run(adapter.send_typing("191655492")) is None
+        assert _run(adapter.send_typing("191655492")) is None
+        assert adapter._api.set_activity.await_count == 2
+
+    def test_edit_message_rewrites_the_sent_message(self, vk, adapter_factory):
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.edit_message = AsyncMock(return_value={"message_id": 77})
+
+        result = _run(adapter.edit_message("191655492", "77", "half a th"))
+
+        assert result.success is True
+        assert result.message_id == "77"
+        args = adapter._api.edit_message.await_args.args
+        assert args[0] == 191655492
+        assert args[1] == 77
+        assert args[2] == "half a th"
+
+    def test_edit_message_strips_markdown(self, vk, adapter_factory):
+        """VK renders plain text, so the emphasis has to go before the
+        message reaches it."""
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.edit_message = AsyncMock(return_value={})
+
+        _run(adapter.edit_message("191655492", "77", "**bold**"))
+
+        assert adapter._api.edit_message.await_args.args[2] == "bold"
+
+    def test_edit_message_accepts_finalize(self, vk, adapter_factory):
+        """The gateway's stream consumer always passes finalize=, even
+        when it is False."""
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.edit_message = AsyncMock(return_value={})
+
+        result = _run(adapter.edit_message("191655492", "77", "done", finalize=True))
+
+        assert result.success is True
+
+    def test_edit_message_reports_failure(self, vk, adapter_factory):
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.edit_message = AsyncMock(
+            side_effect=vk.VkApiError("boom", error_code=100)
+        )
+
+        result = _run(adapter.edit_message("191655492", "77", "x"))
+
+        assert result.success is False
+        assert result.error
+
+    def test_edit_message_rate_limit_is_flagged(self, vk, adapter_factory):
+        """The gateway's stream consumer backs off only when the error
+        text says 'rate' or 'flood'. VK's own wording for error 6 is
+        'Too many requests', which says neither — so it is rephrased
+        here, or the consumer would hammer VK at full speed."""
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._api = MagicMock()
+        adapter._api.edit_message = AsyncMock(
+            side_effect=vk.VkApiError("Too many requests", error_code=6)
+        )
+
+        result = _run(adapter.edit_message("191655492", "77", "x"))
+
+        assert result.success is False
+        assert "rate" in (result.error or "").lower()
+        assert result.retryable is True
+
+    def test_edit_message_without_client(self, vk, adapter_factory):
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        result = _run(adapter.edit_message("191655492", "77", "x"))
+        assert result.success is False
 
     def test_chat_info(self, vk, adapter_factory):
         adapter = adapter_factory({"token": "t", "group_id": "1"})
         info = _run(adapter.get_chat_info("2191655493"))
         assert info["type"] == "dm"
         assert info["chat_id"] == "2191655493"
+
+    def test_chat_info_knows_a_dm_from_the_event(self, vk, adapter_factory):
+        """A personal dialog is addressed by the BARE user id, which sits
+        below the offset a group conversation uses — so the type has to
+        come from the event, not from the number."""
+        adapter = adapter_factory({"token": "t", "group_id": "1"})
+        adapter._chat_types["191655492"] = "dm"
+
+        info = _run(adapter.get_chat_info("191655492"))
+
+        assert info["type"] == "dm"
 
 
 # ---------------------------------------------------------------------------
