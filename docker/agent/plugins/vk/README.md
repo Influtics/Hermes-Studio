@@ -155,6 +155,68 @@ Then set the environment variables on the Coolify `hermes-agent` app and
 redeploy. The `hermes-agent` app must be on branch `main` (a stale
 `feat/minimax-anthropic-provider` pin will not pick this up).
 
+## Typing and streaming
+
+Both are supported, and both need no changes to Hermes core.
+
+**Typing.** VK's `messages.setActivity` is the counterpart of Telegram's
+`sendChatAction`: with a community token it makes the community appear
+as typing in the user's dialog. The gateway calls `send_typing` on a
+~2-second heartbeat, so one implementation gives a self-refreshing
+bubble for free. The adapter sends it only for a personal dialog — a
+group conversation has no single user to attach the activity to.
+
+**Streaming.** The gateway's `stream_consumer` sends the first chunk of
+a reply with `messages.send` and then rewrites that same message with
+`messages.edit` as the answer grows. An adapter that does not implement
+`edit_message` gets `SendResult(success=False, error="Not supported")`
+from the base class and the consumer falls back to a single message — so
+implementing `edit_message` is the whole job.
+
+VK has no draft API, so the transport stays `edit`. The native-draft
+transport (`sendMessageDraft`) is Telegram-only.
+
+### Turning streaming on
+
+Streaming is **off by default** (`StreamingConfig.enabled = False`), and
+the knob is per-platform:
+
+```yaml
+display:
+  platforms:
+    vk:
+      streaming: true
+```
+
+`display.platforms.<platform>.streaming` is resolved *before* the
+top-level `streaming.enabled`, so setting it for `vk` enables streaming
+for VK alone and leaves Telegram exactly as it was.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VK_STREAMING` | `true` | Render the block above when the agent image starts. `false` turns streaming off without a code change |
+
+The agent image renders that block itself: `docker/agent/entrypoint.sh`
+writes it whenever `VK_GROUP_TOKEN` is set.
+
+The edit cadence defaults to one edit per 0.8s — tuned for Telegram's
+~1 edit/s flood envelope. VK's `messages.edit` has its own limit, and
+the stream consumer already backs off when VK reports a rate limit: the
+adapter rephrases VK's error 6 ("Too many requests") so the consumer's
+flood detection recognises it.
+
+### The VK methods it calls
+
+| Method | Why |
+|---|---|
+| `groups.getLongPollServer` | The Long Poll server, key and `ts` |
+| `groups.getLongPollSettings` | Read the event flags — `message_new` must be on |
+| `messages.send` | Send a reply |
+| `messages.edit` | Rewrite a reply in place — this is what makes streaming possible |
+| `messages.setActivity` | The typing indicator |
+| `users.get` | The sender's display name (the Long Poll carries no profile) |
+| `groups.getById` | The community's display name |
+
 ## Tests
 
 ```bash

@@ -38,7 +38,7 @@ optional_env:
     prompt: "Allow all VK users? (true/false)"
     password: false
   - name: VK_HOME_CHANNEL
-    description: "Default peer id for cron / notification delivery (personal dialog: 2000000001 + user id)"
+    description: "Default peer id for cron / notification delivery (the BARE user id — VK rejects the 2000000001 + user id form with 'peer_id is invalid')"
     prompt: "VK home channel peer id (or empty)"
     password: false
   - name: VK_HOME_CHANNEL_NAME
@@ -64,4 +64,8 @@ optional_env:
   - name: VK_LONGPOLL_MODE
     description: "How the Long Poll is reached: 'auto' (default — direct, falling back to the proxy on failure), 'proxy', or 'direct'"
     prompt: "Long Poll mode (auto/proxy/direct)"
+    password: false
+  - name: VK_STREAMING
+    description: "Show the answer as it is written (progressive message edits). 'true' (default) or 'false'"
+    prompt: "Stream responses in VK? (true/false)"
     password: false

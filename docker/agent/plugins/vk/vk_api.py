@@ -393,9 +393,13 @@ class VkApi:
     ) -> Dict[str, Any]:
         """Send a text message to ``peer_id``.
 
-        ``peer_id`` is the conversation the message came from: a personal
-        dialog is ``2000000001 + user_id``, a community conversation is the
-        conversation id itself.
+        ``peer_id`` is the conversation the message came from. A personal
+        dialog with a community is addressed by the **bare** user id —
+        that is what VK reports as ``peer_id`` in a ``lp_version=2``
+        event, and what ``messages.send`` accepts. The
+        ``2000000001 + user_id`` form is rejected with ``peer_id is
+        invalid``. A community conversation is the conversation id
+        itself.
         """
         response = await self.api_call(
             "messages.send",
@@ -406,6 +410,60 @@ class VkApi:
             },
         )
         return response if isinstance(response, dict) else {}
+
+    async def edit_message(
+        self, peer_id: int, message_id: int, text: str
+    ) -> Dict[str, Any]:
+        """Replace the text of a message the community already sent.
+
+        ``messages.edit`` is what the gateway's streaming path uses to
+        show a response as it is generated: the first chunk is sent with
+        ``messages.send``, and every later chunk rewrites that same
+        message.
+        """
+        response = await self.api_call(
+            "messages.edit",
+            {"peer_id": peer_id, "message_id": message_id, "message": text},
+        )
+        return response if isinstance(response, dict) else {}
+
+    async def set_activity(
+        self, peer_id: int, user_id: int, activity: str = "typing"
+    ) -> Dict[str, Any]:
+        """Show the community as typing in a user's chat.
+
+        ``messages.setActivity`` is VK's counterpart of Telegram's
+        ``sendChatAction``: with a community token it makes the community
+        appear as typing in the dialog with that user.
+
+        ``user_id`` is the user the activity belongs to, and ``group_id``
+        identifies the community making it — VK requires both when the
+        call is made with a community token.
+        """
+        params: Dict[str, Any] = {
+            "peer_id": peer_id,
+            "user_id": user_id,
+            "type": activity,
+        }
+        group_id = self._group_id_as_int()
+        if group_id is not None:
+            params["group_id"] = group_id
+
+        response = await self.api_call("messages.setActivity", params)
+        return response if isinstance(response, dict) else {}
+
+    def _group_id_as_int(self) -> Optional[int]:
+        """The community id as an integer, or ``None`` when it is not set.
+
+        Some VK methods want a numeric ``group_id``; others accept the
+        string form. Converting once here keeps the call sites simple.
+        """
+        if not self.group_id:
+            return None
+        try:
+            return int(str(self.group_id).strip())
+        except (TypeError, ValueError):
+            return None
 
     async def get_user(self, user_id: int) -> Dict[str, Any]:
         """Fetch a user's public profile (best effort — name lookup only)."""
